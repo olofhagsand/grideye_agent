@@ -1,0 +1,69 @@
+#! /bin/sh
+
+### BEGIN INIT INFO
+# Provides:          grideye_agent
+# Required-Start:
+# Required-Stop:
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: grideye_agent
+# Description:       grideye measurement agent
+### END INIT INFO
+
+PATH=/sbin:/usr/sbin:/bin:/usr/bin:/usr/local/sbin
+DESC="GRIDEYE AGENT daemon"
+NAME=grideye_agent
+DNAME=grideye_agent
+DAEMON=/usr/local/bin/$NAME
+HOSTNAME=`hostname`
+ID=a4315f60-e890-4f8f-9a0b-eb53d4da2d3a  # nordunet
+#ID=1d08d032-d6d8-4397-93bb-123ec1ad4848 # hagsand
+#ID=8aba12ff-8dd5-4a21-ac5f-a731533158fb # wlan
+READFILE="/var/tmp/GRIDEYE_LARGEFILE"
+WRITEFILE="/var/tmp/GRIDEYE_WRITEFILE"
+FILESIZE="1M" # * 1K bytes
+DAEMON_ARGS="-u http://grideye.nordu.net -I $ID -N $HOSTNAME" # -D # for debug
+
+SCRIPTNAME=/etc/init.d/$DNAME
+
+# Exit if the package is not installed
+[ -x "$DAEMON" ] || exit 0
+
+# read lib functions
+. /lib/lsb/init-functions
+
+case "$1" in
+    start)
+        echo "Creating large file $READFILE*1K"
+        /bin/dd if=/dev/zero of=$READFILE bs=$FILESIZE count=1K
+	echo -n "Starting $DESC" "$NAME"
+	start-stop-daemon -S -q -o -x $DAEMON -- $DAEMON_ARGS
+	echo " success"
+	;;
+    stop)
+	echo -n "Stopping $DESC" "$NAME"
+	start-stop-daemon -K -q -R TERM/30/KILL/5 -n $NAME
+	echo " success"
+	;;
+    status)
+	status "$DAEMON" && exit 0 || exit $?
+	echo " success"
+	;;
+    restart|force-reload)
+	#
+	# If the "reload" option is implemented then remove the
+	# 'force-reload' alias
+	#
+	echo -n "Restarting $DESC" "$NAME"
+	pkill grideye_agent
+	sleep 1
+	$DAEMON $DAEMON_ARGS &> /dev/null &
+	echo " success"
+	;;
+    *)
+	echo "Usage: $SCRIPTNAME {start|stop|status|restart|force-reload}" >&2
+	exit 3
+	;;
+esac
+
+:

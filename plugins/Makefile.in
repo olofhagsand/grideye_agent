@@ -1,0 +1,115 @@
+#
+# Copyright (C) 2015-2016 Olof Hagsand
+#
+# This file is part of GRIDEYE.
+#
+# GRIDEYE is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# GRIDEYE is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with GRIDEYE; see the file LICENSE.  If not, see
+# <http://www.gnu.org/licenses/>.
+#
+
+
+VPATH       	= @srcdir@
+prefix		= @prefix@
+srcdir  	= @srcdir@
+exec_prefix     = @exec_prefix@
+datarootdir	= @datarootdir@
+localstatedir   = @localstatedir@
+libdir          = @libdir@
+top_srcdir  	= @top_srcdir@
+bindir          = @bindir@
+HOST_CPU        = @host_cpu@
+#plugindir	= $(DESTDIR)$(libdir)/grideye
+plugindir	= $(DESTDIR)@GRIDEYE_PLUGIN_DIR@
+
+CC	= @CC@
+#CFLAGS  = @CFLAGS@  @DEFS@
+CFLAGS  = -O2 -Wall -rdynamic -fPIC # Dynamic linking
+CFLAGS += -D_NOMAIN # Disable unit test main in .c files
+CFLAGS += -DPLUGINDIR=$(plugindir)
+LDFLAGS = @LDFLAGS@
+INCLUDES  = -I.
+INCLUDES += -I@srcdir@
+INCLUDES += @INCLUDES@
+INCLUDES += -I$(top_srcdir)/util
+
+INSTALL = @INSTALL@
+
+PLUGINS  = grideye_dhrystones.so.1
+PLUGINS += grideye_diskio_write.so.1
+PLUGINS += grideye_diskio_write_rnd.so.1
+PLUGINS += grideye_diskio_read.so.1
+PLUGINS += grideye_mem_read.so.1
+PLUGINS += grideye_wlan.so.1
+PLUGINS += grideye_iwget.so.1
+PLUGINS += grideye_sysinfo.so.1
+ifeq ($(HOST_CPU),x86_64)
+PLUGINS += grideye_cycles.so.1
+endif
+
+.PHONY:	all clean distclean install uninstall depend TAGS
+
+all:	$(PLUGINS)
+
+# Build plugin
+grideye_dhrystones.so.1: dhry_1.c dhry_2.c dhrystones.c
+	echo $(plugindir)
+	$(CC) $(CFLAGS) -shared -o $@ -lc $^
+
+grideye_diskio_write.so.1: diskio_write.c
+	$(CC) $(CFLAGS) -shared -o $@ -lc $^ 
+
+grideye_diskio_write_rnd.so.1: diskio_write_rnd.c
+	$(CC) $(CFLAGS) -shared -o $@ -lc $^ 
+
+grideye_diskio_read.so.1: diskio_read.c
+	$(CC) $(CFLAGS) -shared -o $@ -lc $^
+
+grideye_mem_read.so.1: mem_read.c mem_read_test.c
+	$(CC) $(CFLAGS) -shared -o $@ -lc $^
+
+grideye_wlan.so.1: grideye_wlan.c
+	$(CC) $(CFLAGS) -shared -o $@ -lc $^ -lm
+
+grideye_iwget.so.1: grideye_iwget.c
+	$(CC) $(CFLAGS) -shared -o $@ -lc $^ -lm
+
+grideye_sysinfo.so.1: grideye_sysinfo.c
+	$(CC) $(CFLAGS) -shared -o $@ -lc $^ -lm
+
+ifeq ($(HOST_CPU),x86_64)
+grideye_cycles.so.1: cycles.c cycles_test.s
+	$(CC) $(CFLAGS) -shared -o $@ -lc $^
+endif
+
+clean:
+	rm -f $(PLUGINS)
+
+distclean:	clean  
+	rm -f Makefile *~ .depend
+
+install: $(PLUGINS)
+	$(INSTALL) -d $(plugindir)
+	$(INSTALL) $^ $(plugindir)
+
+uninstall:
+	for i in $(PLUGIN); do \
+		rm -f $(plugindir)/$$i; done
+	rm -f $(plugindir)/*
+
+depend:
+	$(CC) $(DEPENDFLAGS) @DEFS@ $(INCLUDES) $(CFLAGS) -MM > .depend
+
+#include .depend
+
+

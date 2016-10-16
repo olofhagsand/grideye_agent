@@ -1,0 +1,137 @@
+Debug
+=====
+In normal operation, grideye_agent use syslog using ident "grideye_agent", 
+Example:
+# grideye_agent 
+# tail -f /var/log/syslog | grep grideye_agent
+
+If you run grideye_agent in foreground it will log on stderr instead.
+# grideye_agent -F
+
+You can increase logging level with -D (for debug).
+# grideye_agent -DF
+
+Dataformats
+===========
+
+grideye --> sender
+# On start, grideye forks a sender and prints (part of) the configuration
+# on stdin to the agent
+# first come a sender xml.                                               
+# then comes a resultdb xml only containing interval1        
+<xml> ::=
+<sender>
+   <name>eu-west-gce</name>
+   <ipv4_daddr>130.211.85.18</ipv4_daddr>
+   <userid>a4315f60-e890-4f8f-9a0b-eb53d4da2d3a</userid>
+   <start>true</start>
+   <legacy>false</legacy>
+   <proto>udp</proto>
+   <header>twoway</header>
+   <udp_dport>7878</udp_dport>
+   <round>
+      <number>0</number>
+      <req>
+         <value>100</value>
+         <upper>200</upper>
+      </req>
+      <resp>
+         <value>400</value>
+         <upper>500</upper>
+      </resp>
+      <interval>
+         <value>1000</value>
+         <upper>1100</upper>
+      </interval>
+      <ior>
+         <value>3000</value>
+      </ior>
+      <iow>
+         <value>3000</value>
+      </iow>
+      <cmp>
+         <value>30000</value>
+      </cmp>
+   </round>
+   <duration>
+      <time>0</time>
+      <rounds>0</rounds>
+   </duration>
+</sender>
+   <resultdb>
+      <interval1>60</interval1>
+   </resultdb>
+
+sender	 	 agent
+-- control -->
+<controlhdr> ::= <tag1> <tag2> <mtype> <xml>
+# (1)
+<xml> ::= <grideye><resp>0</resp><ior>0</ior><iow>0</iow><cmp>0</cmp></grideye>
+<xml> ::= <metric><metric>usedswap</metric><metric>usedram</metric></metric>
+
+<-- control --
+<controlhdr> ::= <tag1> <tag2> <mtype> <xml>
+<xml>        ::= <E64>...</E64>
+
+-- data -->
+<twamphdr>|<twowayhdr> <payload>
+<payload> ::= <response pkt len> <ioread bytes> <iowrite bytes> <dhrystones>
+  or
+<payload> ::= 0 <nr>* # According to fields in control xml (1) above
+
+<-- data --
+<twamphdr>|<twowayhdr> <payload>
+<payload> ::= <counter>*
+<counter> ::= <loads><uint32></loads>
+ 	      <freeram><uint32></freeram>
+	      <bufferram><uint32></bufferram>
+	      ...
+
+Sender output
+=============
+The sender prints XML on stdout (to controller) on the following occasions.
+All xml messages are encapsulated as <sample>...</sample> but contain
+different information.
+1. When a data packet has been sent to the agent
+   <proto>sender</proto><name>.</name><ids>.</ids><sseqn></sseqn><t0>.</t0>
+2. When a control packet has been received from the agent
+   <proto>control</proto><name>.</name><ids>.</ids><ida>.</ida>
+3. When a data packet has been received from an agent
+   <proto>data</proto>the whole enchilada
+4. On timeout - aggregation interval
+   Timeout aggregation interval: <proto>interval</proto><sseqn><t0>
+   The interval is set in xml: resultdb/interval1 and is typically 60s
+Dynamics
+========
+control
+data # here grideye_agent is locked to the sender, mtype
+data
+data
+control # here grideye_agent may be locked to another sender, mtype
+
+Note, the locking mechanism is per sender (there can be many senders to 1 agent)
+sender A        agent
+----------------------
+control  ---->  register A
+        <----
+data     ---->  find A
+        <----
+data     ---->  find A
+        <----
+
+Assume sender is restarted (with new address B)
+control  ---->  register B
+        <----
+data     ---->  find B
+        <----
+data     ---->  find B
+        <----
+
+Assume agent is restarted (with sender A going on)
+data     ---->  no find A
+data     ---->  no find A
+
+Mitigation:
+(1) let agent answer as legacy (this should work) - problem w false senders?
+(2) let sender sometimes send control (if nothing is received)
+

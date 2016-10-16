@@ -1,0 +1,141 @@
+#
+# Copyright (C) 2015-2016 Olof Hagsand
+#
+# This file is part of GRIDEYE.
+#
+# GRIDEYE is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# GRIDEYE is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with GRIDEYE; see the file LICENSE.  If not, see
+# <http://www.gnu.org/licenses/>.
+#
+
+
+VPATH       	= @srcdir@
+prefix		= @prefix@
+srcdir  	= @srcdir@
+exec_prefix     = @exec_prefix@
+datarootdir	= @datarootdir@
+top_srcdir  	= @top_srcdir@
+bindir          = @bindir@
+libdir		= @libdir@
+includedir	= @includedir@
+HOST_CPU        = @host_cpu@
+
+CC	= @CC@
+CFLAGS  = @CFLAGS@  @DEFS@ -D_NOMAIN -fPIC
+LDFLAGS = @LDFLAGS@
+LIBS    = @LIBS@
+INCLUDES  = -I.
+INCLUDES += -Iplugins/
+INCLUDES += -I@srcdir@
+INCLUDES += @INCLUDES@
+INCLUDES += -I$(top_srcdir)/util
+
+INSTALL = @INSTALL@
+GRIDEYE_VERSION  = @GRIDEYE_VERSION@
+
+LIBSRC  = grideye_agent_lib.c
+LIBSRC += build.c
+
+LIBINC	= grideye_agent.h
+
+SRC	= grideye_agent.c 
+
+OBJS    = $(SRC:.c=.o) 
+LIBOBJS = $(LIBSRC:.c=.o) 
+APPS	= $(SRC:.c=)
+
+# Linker-name: libgrideye_agent.so
+# so-name: libgrideye_agent.so.1
+# real-name: libgrideye_agent.so.1.0
+MYLIB        = libgrideye_agent.so.1.0
+MYLIBSO      = libgrideye_agent.so.1
+MYLIBLINK    = libgrideye_agent.so
+
+# Sub-directores.
+SUBDIRS = plugins docker
+
+.PHONY:	build.c all clean distclean install uninstall depend TAGS $(SUBDIRS)
+
+all:	$(APPS) $(SUBDIRS) $(MYLIB) $(MYLIBLINK)
+
+build.c:
+	date +"const char GRIDEYE_BUILDSTR[64]=\"%Y.%m.%d %H:%M by `whoami` on `hostname`"\"\; > build.c;
+	echo "const char GRIDEYE_VERSION[64]=\"$(GRIDEYE_VERSION)\""\; >> build.c;
+
+$(SUBDIRS):
+	(cd $@ && $(MAKE) $(MFLAGS) all)
+
+grideye_agent :	grideye_agent.c $(LIBOBJS) 
+	$(CC) $(CFLAGS) $(INCLUDES) $< $(LDFLAGS) $(LIBOBJS) $(LIBS) -o $@ 
+
+$(MYLIB) : $(LIBOBJS)
+	$(CC) -shared -o $@ $(LIBOBJS) -Wl,-soname=$(MYLIB) $(LIBS)
+
+# link-name is needed for application linking
+$(MYLIBSO) : $(MYLIB)
+
+$(MYLIBLINK) : $(MYLIB)
+
+clean:
+	rm -f $(APPS) $(OBJS) $(LIBOBJS) $(MYLIB) $(MYLIBSO) $(MYLIBLINK) build.c
+	for i in $(SUBDIRS); \
+	do (cd $$i; $(MAKE) $(MFLAGS) $@); done; 
+
+distclean:	clean  
+	rm -f Makefile *~ .depend TAGS config.log
+	for i in $(SUBDIRS); \
+	do (cd $$i; $(MAKE) $(MFLAGS) $@); done; 
+
+install-bin: $(APPS)
+	$(INSTALL) -d $(DESTDIR)$(bindir)
+	for i in $(APPS); do \
+		$(INSTALL) $$i $(DESTDIR)$(bindir)/$$i; \
+	done
+
+install-lib: $(MYLIB)
+	install -m 755 -d $(DESTDIR)$(libdir) 
+	install -m 755 $(MYLIB) $(DESTDIR)$(libdir) 
+	ln -sf $(MYLIB) $(DESTDIR)$(libdir)/$(MYLIBSO)     # -l:libgrideye_agent.so.3
+	ln -sf $(MYLIBSO) $(DESTDIR)$(libdir)/$(MYLIBLINK) # -l:libgrideye_agent.so
+
+install-include: $(LIBINC)
+	install -d $(DESTDIR)$(includedir) 
+	install -m 644 $(LIBINC) $(DESTDIR)$(includedir) 
+
+# install-bin install-include
+install: install-bin install-lib install-include
+	for i in $(SUBDIRS); \
+	do (cd $$i && $(MAKE) $(MFLAGS) $@); done
+
+uninstall:
+	rm -f $(DESTDIR)$(libdir)/$(MYLIB)
+	for i in $(APPS); do \
+		rm -f $(bindir)/$$i; \
+	done
+	for i in $(LIBINC); do \
+		rm -f $(DESTDIR)$(includedir)/$$i; \
+	done
+	for i in $(SUBDIRS); \
+	do (cd $$i && $(MAKE) $(MFLAGS) $@); done
+
+TAGS:
+	find $(srcdir) -name '*.[chyl]' | etags -
+
+depend:
+	$(CC) $(DEPENDFLAGS) @DEFS@ $(INCLUDES) $(CFLAGS) -MM $(SRC) $(LIBSRC) > .depend
+	for i in $(SUBDIRS); \
+	do (cd $$i; $(MAKE) $(MFLAGS) $@); done
+
+#include .depend
+
+
