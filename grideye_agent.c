@@ -377,8 +377,11 @@ url_post(char *url,
     curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, strlen(putdata));
     if (debug>1)
 	curl_easy_setopt(curl, CURLOPT_VERBOSE, 1);   
+    
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 600); /* 10 min */
+    
     if ((errcode = curl_easy_perform(curl)) != CURLE_OK){
-	clicon_log(LOG_NOTICE, "%s: curl: %s(%d)", __FUNCTION__, err, errcode);
+	clicon_log(LOG_NOTICE, "%s: curl_easy_perform: %s(%d)", __FUNCTION__, err, errcode);
 	retval = 0;
 	goto done; 
     }
@@ -510,11 +513,11 @@ send_one_agent(int              s,
 	switch (errno){
 	case ENOBUFS: /* try again if ifq is empty */
 	    nr_nobufs++;
-	    perror("sendto");
+	    clicon_log(LOG_WARNING,  "sendto %s", __FUNCTION__, strerror(errno));
 	    return 0;
 	    break;
 	case ENETUNREACH: /* try again */
-	    perror("sendto");
+	    clicon_log(LOG_WARNING,  "sendto %s", __FUNCTION__, strerror(errno));
 	    return 0;
 	    break;
 	default:
@@ -578,7 +581,7 @@ echo_application(struct sender *snd,
 	while ((x = xml_child_each(xround, x, -1)) != NULL)
 	    nri++;
         if ((invec = calloc(nri, sizeof(int))) == NULL){
-            perror("calloc");
+	    clicon_err(OE_UNIX, errno, "calloc");
             goto done;
         }
 	nr = 0;
@@ -736,7 +739,7 @@ echo_packet(int            s,
 
     /* Here is where the message is actually read */
     if ((len = recvmsg(s, &msg, 0x0)) < 0){
-	perror("recvmsg");
+	clicon_err(OE_UNIX, errno, "recvmsg");
 	goto done;
     }
     clicon_log(LOG_DEBUG, "%s: recvmsg from: %s:%hu", __FUNCTION__, 
@@ -769,7 +772,7 @@ echo_packet(int            s,
 	FILE *f;
 	snprintf(filename, 1024, "%s%d", DUMPMSGFILE, ii++);
 	if ((f = fopen(filename, "w")) == NULL){
-	    perror("fopen");
+	    clicon_err(OE_UNIX, errno, "fopen");
 	    goto done;
 	}
 	fwrite(buf, 1, len, f);
@@ -1214,6 +1217,11 @@ nattraversal_tcp(int                 s,
     return retval;
 }
 
+static void 
+grideye_sig(int arg)
+{
+    clicon_log(LOG_NOTICE, "%s: %d", __FUNCTION__, arg);
+}
 
 /*! Exit functions either called on sigterm or end of main */
 static void 
@@ -1223,6 +1231,7 @@ doexit(int arg)
     void          *handle = NULL;
     struct plugin *p;
 
+    clicon_log(LOG_NOTICE, "%s: %d", __FUNCTION__, arg);
     timersub(&lastpkt, &firstpkt, &dur);
 
     if (pidfile)
@@ -1242,7 +1251,6 @@ doexit(int arg)
     }
     while (s_list != NULL)
 	s_rm(s_list);
-
     exit(0);
 }
 
@@ -1406,7 +1414,7 @@ main(int   argc,
     proto = GRIDEYE_PROTO_UDP;
     /* Hostname for logs and callbacks, overwritten by -N */
     if (gethostname(hostname, sizeof(hostname)) < 0) {
-	perror("gethostname");
+	clicon_err(OE_UNIX, errno, "gethostname");
 	exit(0);
     }
 
@@ -1578,12 +1586,12 @@ main(int   argc,
 	fprintf(stderr, "%s %s\n", diskio_largefile, diskio_writefile);
     if (filename){
 	if ((f = fopen(filename, "w")) == NULL){
-	    perror("fopen");
+	    clicon_err(OE_UNIX, errno, "fopen");
 	    exit(0);
 	}
     }
-    set_signal(SIGINT, doexit, NULL);
-    set_signal(SIGTERM, doexit, NULL);
+    set_signal(SIGINT, grideye_sig, NULL);
+    set_signal(SIGTERM, grideye_sig, NULL);
 
     /* Initialize: create/bind socket for tcp/udp */
     switch (proto){
@@ -1648,6 +1656,7 @@ main(int   argc,
     }
 
     for (;;){
+	int errno0;
 	FD_ZERO(&fdset);
 	switch (proto){
 	case GRIDEYE_PROTO_UDP:
@@ -1664,9 +1673,10 @@ main(int   argc,
 	poll_period_tv.tv_sec = callhome_timeout;
 	poll_period_tv.tv_usec = 0;
 	n = select(FD_SETSIZE, &fdset, NULL, NULL, &poll_period_tv); 
+	errno0 = errno;
 	t1 = gettimestamp();
 	if (n == -1) {
-	    clicon_err(OE_UNIX, errno, "select");
+	    clicon_err(OE_UNIX, errno0, "select");
 	    goto done;
 	}
 	/* Timeout */
