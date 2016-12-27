@@ -12,17 +12,15 @@
 
 PATH=/sbin:/usr/sbin:/bin:/usr/bin:/usr/local/sbin
 DESC="GRIDEYE AGENT daemon"
-NAME=grideye_agent
+NAME=grideye_agent # May not include '-' for grafana dependencies
 DNAME=grideye_agent
 DAEMON=/usr/local/bin/$NAME
 HOSTNAME=`hostname`
-ID=a4315f60-e890-4f8f-9a0b-eb53d4da2d3a  # nordunet
-#ID=1d08d032-d6d8-4397-93bb-123ec1ad4848 # hagsand
-#ID=8aba12ff-8dd5-4a21-ac5f-a731533158fb # wlan
+ID=<userid> # XXX Need to set to grideye user id
 READFILE="/var/tmp/GRIDEYE_LARGEFILE"
 WRITEFILE="/var/tmp/GRIDEYE_WRITEFILE"
 FILESIZE="1M" # * 1K bytes
-DAEMON_ARGS="-u http://grideye.nordu.net -I $ID -N $HOSTNAME" # -D # for debug
+DAEMON_ARGS="-u http://grideye.sunet.se -I $ID -N $HOSTNAME" # -D # for debug
 
 SCRIPTNAME=/etc/init.d/$DNAME
 

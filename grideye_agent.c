@@ -82,7 +82,11 @@ extern const char GRIDEYE_VERSION[];
 
 #define GRIDEYE_AGENT_PIDFILE "/var/run/grideye_agent.pidfile"
 
-#define CALLHOME_DEFAULT  10 /* seconds */
+/* This timeout may interfer with network timeout. It should be well above
+ * interval setting (eg yang sender->round->interval
+ * but may also trigger if the probe is out of reach for a period of time
+ */
+#define CALLHOME_DEFAULT  20 /* seconds */
 
 /* Wireless file to read status from */
 #define PROC_NET_WIRELESS "/proc/net/wireless"
@@ -513,11 +517,11 @@ send_one_agent(int              s,
 	switch (errno){
 	case ENOBUFS: /* try again if ifq is empty */
 	    nr_nobufs++;
-	    clicon_log(LOG_WARNING,  "sendto %s", __FUNCTION__, strerror(errno));
+	    clicon_log(LOG_WARNING,  "sendto %s %s", __FUNCTION__, strerror(errno));
 	    return 0;
 	    break;
 	case ENETUNREACH: /* try again */
-	    clicon_log(LOG_WARNING,  "sendto %s", __FUNCTION__, strerror(errno));
+	    clicon_log(LOG_WARNING,  "sendto %s %s", __FUNCTION__, strerror(errno));
 	    return 0;
 	    break;
 	default:
@@ -807,6 +811,7 @@ echo_packet(int            s,
     switch (mtype){
     case MTYPE_TWOWAY:
 	clicon_log(LOG_DEBUG, "%s: MTYPE_TWOWAY", __FUNCTION__);
+	/* Check sender registered in callhome_http*/
 	if ((snd = s_find(msg.msg_name, msg.msg_namelen)) == NULL){
 	  clicon_log(LOG_DEBUG, "grideye_agent: Unregistered twoway sender %s:%hu",
 		     inet_ntoa(from.sin_addr), ntohs(from.sin_port));
@@ -941,6 +946,8 @@ echo_packet(int            s,
  * @param[in]  info          Onfo about this node/agent
  * @param[in,out] natstate   0:none 1:enabled 2:addr&port defined 3: connected
  * @see nattraversal_udp 
+ * XXX: problem with using curl primary_ip in registering server. Eg curl localhost can resolve to
+ *      ::1 , 127.0.1.1 or 127.0.0.1 but the server sender can use typically 127.0.0.1
  */
 static int
 callhome_http(char               *url, 
@@ -991,7 +998,8 @@ callhome_http(char               *url,
     case GRIDEYE_PROTO_UDP:
 	if (getdata==NULL)
 	    break;
-	clicon_log(LOG_DEBUG, "%s getdata:%s", __FUNCTION__, getdata);
+	clicon_log(LOG_DEBUG, "%s remoteip:%s getdata:%s", __FUNCTION__,
+		   remoteip, getdata);
 	if (clicon_xml_parse_string(&getdata, &xreply) < 0){
 	    clicon_log(LOG_WARNING,  "%s: xml parse error: %s", __FUNCTION__, getdata);
 	    /* Note this could actually be html, eg broken xml */
@@ -1017,7 +1025,7 @@ callhome_http(char               *url,
 	    else
 	    	clicon_log(LOG_DEBUG,  "%s: no udp sport", __FUNCTION__);
 	    if (*natstate > 1){
-		/* registrate sender */
+		/* register sender */
 		if ((snd = s_find(&sndaddr, sizeof(sndaddr))) == NULL){
 		    if ((snd = s_add(&sndaddr, sizeof(sndaddr))) == NULL)
 			goto done;

@@ -135,3 +135,11 @@ Mitigation:
 (1) let agent answer as legacy (this should work) - problem w false senders?
 (2) let sender sometimes send control (if nothing is received)
 
+Issues
+======
+1. Problem with using curl primary_ip in registering server. Eg curl localhost can resolve to
+::1 , 127.0.1.1 or 127.0.0.1 but the server sender can use typically 127.0.0.1.
+Therefore, when starting grideye_agent, do not use grideye_agent -u http://localhost, or http://foo.bar if these are local endpoints, use http://127.0.0.1.
+
+
+

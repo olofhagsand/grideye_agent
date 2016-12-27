@@ -98,6 +98,11 @@ clean:
 distclean:	clean  
 	rm -f Makefile *~ .depend
 
+# Special install rule for wireless tests
+install_wireless: grideye_wlan.so.1 grideye_iwget.so.1
+	$(INSTALL) -d $(plugindir)
+	$(INSTALL) $^ $(plugindir)
+
 install: $(PLUGINS)
 	$(INSTALL) -d $(plugindir)
 	$(INSTALL) $^ $(plugindir)
