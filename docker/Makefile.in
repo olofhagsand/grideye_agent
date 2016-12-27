@@ -55,6 +55,8 @@ push:
 
 install:
 
+install_wireless:
+
 uninstall: 
 
 install-include:	
