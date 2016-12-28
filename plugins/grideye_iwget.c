@@ -14,6 +14,8 @@
  * wlan0     Frequency:5.28 GHz
  * $ iwgetid -p # protocol name
  * wlan0     Protocol Name:"IEEE 802.11AC”
+ *
+ * XXX: Consider using --raw option to iwgetid   
  */
 #include <stdint.h>
 #include <stdlib.h>
@@ -125,6 +127,7 @@ iwget_fork(const char *prog,
 /*!
  * @param[in]  p      The string to use (+ offset)
  * @param[in]  offset Added offset on string
+ * XXX: Why remove and then add double quotes?
  */
 static int
 stringadd(char  *p,
@@ -141,7 +144,7 @@ stringadd(char  *p,
     p += offset;
     if (p[0] == '\"')
 	p++;
-    /* Strip optional " if they exists */
+    /* Strip optional " if they exists and add them (again) below */
     if (p[strlen(p)-1] == '\"')
 	p[strlen(p)-1] = '\0';
     slen = strlen(p)+2*strlen(keyword)+5+2; /* 7 is <>""</>  */
@@ -150,7 +153,7 @@ stringadd(char  *p,
 	goto done;
     }	
     /* Always add double quotes (may have been removed above) */
-    snprintf(*s0+*s0len, slen+1, "<%s>%s</%s>", keyword, p, keyword);
+    snprintf(*s0+*s0len, slen+1, "<%s>\"%s\"</%s>", keyword, p, keyword);
     *s0len += slen;
     retval = 0;
  done:
