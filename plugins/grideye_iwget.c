@@ -176,6 +176,7 @@ iwget_test(int       dummy,
     int             len;
     char           *s0=NULL; /* whole string */
     int             s0len=0; /* length of whole string */
+    char           *p;
 
     /* 
      *  The fork code executes iwgetid and returns a string
@@ -186,22 +187,25 @@ iwget_test(int       dummy,
     if (len && stringadd(buf, 0, "iwessid", &s0, &s0len) < 0)
 	goto done;
 
-    if (iwget_fork(_iwgetprog, _device, "-a", buf, buflen) < 0)
+    if ((len = iwget_fork(_iwgetprog, _device, "-a", buf, buflen)) < 0)
 	goto done;
     if (len && stringadd(rindex(buf, ' '), 1, "iwaddr", &s0, &s0len) < 0)
 	goto done;
 
-    if (iwget_fork(_iwgetprog, _device, "-c", buf, buflen) < 0)
+    if ((len = iwget_fork(_iwgetprog, _device, "-c", buf, buflen)) < 0)
 	goto done;
     if (len && stringadd(rindex(buf, ':'), 1, "iwchan", &s0, &s0len) < 0)
 	goto done;
-
-    if (iwget_fork(_iwgetprog, _device, "-f", buf, buflen) < 0)
+    
+    if ((len = iwget_fork(_iwgetprog, _device, "-f", buf, buflen)) < 0)
 	goto done;
-    if (len && stringadd(rindex(buf, ':'), 1, "iwfreq", &s0, &s0len) < 0)
+    /* Strange: sometimes ':', sometimes '=' */
+    if ((p = rindex(buf, ':')) == NULL)
+	p = rindex(buf, '=');
+    if (len && stringadd(p, 1, "iwfreq", &s0, &s0len) < 0)
 	goto done;
 
-    if (iwget_fork(_iwgetprog, _device, "-p", buf, buflen) < 0)
+    if ((len = iwget_fork(_iwgetprog, _device, "-p", buf, buflen)) < 0)
 	goto done;
     if (len && stringadd(rindex(buf, ':'), 1, "iwproto", &s0, &s0len) < 0)
 	goto done;
