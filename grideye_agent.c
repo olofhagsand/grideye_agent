@@ -85,6 +85,8 @@ extern const char GRIDEYE_VERSION[];
 /* This timeout may interfer with network timeout. It should be well above
  * interval setting (eg yang sender->round->interval
  * but may also trigger if the probe is out of reach for a period of time
+ * So: either no traffic reaching the probe, or "wrong" traffic reaching,
+ * Wrong being for example a new sender (the old is dead).
  */
 #define CALLHOME_DEFAULT  20 /* seconds */
 
@@ -678,6 +680,7 @@ echo_application(struct sender *snd,
  * @param[in]      eid64str EID64 string, given or random for this agent
  * @param[in]      wi       Wireless interface name, or NULL if no wlan tests
  * @param[in]      name     If set with -n the name
+ * @param[oit]     ok       Set to 1 if an OK (eg known sender) pkt arrived
  * xcontrol:  Ctrl hdr has been received and this is the one
  * snd:  0    A data packet has been received from an unregistered sender
  * snd:  1    A data packet has been received from a registered sender
@@ -699,7 +702,8 @@ echo_packet(int            s,
 	    int            duplicate,
 	    char          *wi,
 	    struct plugin  plugins[],
-	    char          *name
+	    char          *name,
+	    int           *ok
 	    )
 {
     int                retval = -1;
@@ -850,6 +854,7 @@ echo_packet(int            s,
      * snd holds it control state if any. If snd=NULL the control packet has
      * not received yet or it is just a non-grideye_sender
      */
+    *ok = 1; /* ok pkt */
     for (cmsg=CMSG_FIRSTHDR(&msg); cmsg!=NULL; cmsg=CMSG_NXTHDR(&msg,cmsg)) {
 	if (cmsg->cmsg_type==IP_TTL) {
 	    if (CMSG_DATA(cmsg) !=  NULL){
@@ -879,7 +884,7 @@ echo_packet(int            s,
 	goto done;
     }
 
-    /* Here starts 'Application monitoring' ie 'programmale behaviour'
+    /* Here starts 'Application monitoring' ie 'programable behaviour'
      * Only do this if sender is known and if we have received grideye 
      * control packets
      */
@@ -1366,7 +1371,6 @@ main(int   argc,
     int                 callhome_timeout;
     char               *filename;
     FILE               *f;
-    struct timeval      tv;
     uint64_t            eid64;
     char                eid64str[24];
     int                 yes;
@@ -1379,7 +1383,8 @@ main(int   argc,
     struct timeval     t1; /* when received */
     int                natstate; /* state: 0:none 1:enabled 2:addr&port defined */
     char              *callhome_url;
-    struct timeval     poll_period_tv;
+    struct timeval     tv;
+    struct timeval     trnd;
     int                loss;
     int                reorder;
     int                duplicate;
@@ -1395,6 +1400,8 @@ main(int   argc,
     pid_t              pid;
     struct stat        st;
     char              *info = NULL;
+    int                errno0;
+    int                ok;
 
     /* Initialization */
     argv0 = argv[0];
@@ -1405,8 +1412,8 @@ main(int   argc,
     callhome_timeout = CALLHOME_DEFAULT; /* timeout for call home */
     filename = NULL;
     f = NULL;
-    gettimeofday(&tv, NULL);
-    srandom(tv.tv_usec);
+    gettimeofday(&trnd, NULL);
+    srandom(trnd.tv_usec); /* init random */
     eid64 = random();
     eid64 = eid64<<32;
     eid64 |= random();
@@ -1662,9 +1669,8 @@ main(int   argc,
 		goto done;
 	break;
     }
-
+    tv.tv_sec = callhome_timeout;
     for (;;){
-	int errno0;
 	FD_ZERO(&fdset);
 	switch (proto){
 	case GRIDEYE_PROTO_UDP:
@@ -1678,9 +1684,9 @@ main(int   argc,
 	    break;
 	}
 	//clicon_log(LOG_DEBUG, "Callhome timeout: %d", callhome_timeout;)
-	poll_period_tv.tv_sec = callhome_timeout;
-	poll_period_tv.tv_usec = 0;
-	n = select(FD_SETSIZE, &fdset, NULL, NULL, &poll_period_tv); 
+	tv.tv_usec = 0;
+	n = select(FD_SETSIZE, &fdset, NULL, NULL, &tv); 
+	/* Consider timeout to be undefined after select() returns. */
 	errno0 = errno;
 	t1 = gettimestamp();
 	if (n == -1) {
@@ -1699,12 +1705,14 @@ main(int   argc,
 			 eid64str,
 			 info) < 0)
 		goto done;
+	    tv.tv_sec = callhome_timeout;
 	}
 	/* Check sockets */
 	switch(proto){
 	case GRIDEYE_PROTO_TCP:
 	case GRIDEYE_PROTO_UDP:
-	    if (FD_ISSET(s, &fdset))  /* udp. can this work for tcp? */
+	    if (FD_ISSET(s, &fdset)){  /* udp. can this work for tcp? */
+		ok = 0;
 		if (echo_packet(s, 
 				t1,
 				buf, 
@@ -1715,8 +1723,12 @@ main(int   argc,
 				duplicate,
 				wi,
 				plugins,
-				hostname) < 0)
+				hostname,
+				&ok) < 0)
 		    goto done;
+		if (ok)
+		    tv.tv_sec = callhome_timeout;
+	    }
 	    break;
 	case GRIDEYE_PROTO_HTTP: /* Eeeh need timer */
 	    clicon_log(LOG_DEBUG, "Send curl Sample");
