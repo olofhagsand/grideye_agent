@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2015-2016 Olof Hagsand
+  Copyright (C) 2015-2017 Olof Hagsand
 
   This file is part of GRIDEYE.
 
@@ -164,11 +164,11 @@ plugins_len(struct plugin *plugins)
  * add it.
  */
 static int 
-plugin_load(void          *handle,
-	    char          *name,
-	    char          *filename,
-	    struct plugin *plugins[]
-	    )
+grideye_plugin_load(void          *handle,
+		    char          *name,
+		    char          *filename,
+		    struct plugin *plugins[]
+		    )
 {
     int                           retval = -1;
     char                         *dlerrcode;
@@ -275,7 +275,7 @@ plugin_load_dir(char          *dir,
 	   clicon_err(OE_UNIX, 0, "dlopen: %s", (char*)dlerror());
 	   goto done;
        }
-       if (plugin_load(handle, name, filename, plugins) < 0){
+       if (grideye_plugin_load(handle, name, filename, plugins) < 0){
 	   free(filename);
 	   goto done;
        }
@@ -347,7 +347,7 @@ url_post(char *url,
 	 char **remoteip)
 {
     CURL      *curl = NULL;
-    char      *err;
+    char      *err = NULL;
     int        retval = -1;
     cxobj     *xr = NULL; /* reply xml */
     struct curlbuf cb = {0, };
@@ -364,8 +364,8 @@ url_post(char *url,
 	clicon_err(OE_PLUGIN, errno, "curl_easy_init");
 	goto done;
     }
-    if ((err = chunk(CURL_ERROR_SIZE, __FUNCTION__)) == NULL) {
-	clicon_err(OE_UNDEF, errno, "%s: chunk", __FUNCTION__);
+    if ((err = malloc(CURL_ERROR_SIZE)) == NULL) {
+	clicon_err(OE_UNDEF, errno, "malloc");
 	goto done;
     }
     curl_easy_setopt(curl, CURLOPT_URL, url);
@@ -423,7 +423,8 @@ url_post(char *url,
     }
     retval = 1;
   done:
-    unchunk_group(__FUNCTION__);
+    if (err)
+	free(err);
     if (xr != NULL)
 	xml_free(xr);
     if (cb.b_buf)
@@ -1685,7 +1686,7 @@ main(int   argc,
 	}
 	//clicon_log(LOG_DEBUG, "Callhome timeout: %d", callhome_timeout;)
 	tv.tv_usec = 0;
-	n = select(FD_SETSIZE, &fdset, NULL, NULL, &tv); 
+	n = select(FD_SETSIZE, &fdset, NULL, NULL, &tv);
 	/* Consider timeout to be undefined after select() returns. */
 	errno0 = errno;
 	t1 = gettimestamp();
