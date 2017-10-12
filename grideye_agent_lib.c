@@ -18,8 +18,6 @@
   <http://www.gnu.org/licenses/>.
 */
 
-#define HAVE_LINUX_SOCKIOS_H 1
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -370,7 +368,7 @@ msgdump(FILE *f,
     int i;
 
     for (i=0; i<len; i++){
-	fprintf(f, "%02hx", buf[i]&0xff);
+      fprintf(f, "%02hx", (unsigned short)(buf[i]&0xff));
 	if ((i+1)%32 == 0)
 	    fprintf(f, "\n");
 	else

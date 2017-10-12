@@ -58,6 +58,7 @@ CLIXON_VERSION="3" # Or newer?
 AC_MSG_RESULT(GRIDEYE version ${GRIDEYE_VERSION})
 
 AC_CANONICAL_TARGET
+
 AC_SUBST(CC)
 AC_SUBST(CFLAGS)
 AC_SUBST(LDFLAGS)
@@ -74,6 +75,7 @@ AC_CHECK_LIB(cligen, cligen_init,, AC_MSG_ERROR(cligen missing. Try: git clone h
 AC_CHECK_HEADERS(clixon/clixon.h,, AC_MSG_ERROR(clixon missing. Try: git clone https://github.com/clicon/clixon.git), [[ #include <cligen/cligen.h> ]])
 AC_SEARCH_LIBS(clicon_handle_init, clixon,, AC_MSG_ERROR(clixon missing. Try: git clone https://github.com/clicon/clixon.git), -lcligen)
 
+
 AC_PROG_CC()
 AC_PROG_CPP
 AC_PROG_INSTALL
@@ -82,7 +84,7 @@ CPPFLAGS="-DHAVE_CONFIG_H ${CPPFLAGS}"
 
 AC_MSG_RESULT(compiler is $CC)	
 
-CFLAGS="${CFLAGS} -Wall -Werror" 
+CFLAGS="${CFLAGS} -Wall" # -Werror
 
 AC_MSG_RESULT(CPPFLAGS is $CPPFLAGS)	
 AC_MSG_RESULT(CFLAGS is $CFLAGS)	
@@ -95,6 +97,17 @@ AR_SUFFIX=".a"
 SH_SUFFIX=".so"
 AR="ar"
 
+dnl ----------------------------
+dnl check sin_len of sockaddr_in
+dnl ----------------------------
+AC_MSG_CHECKING(whether struct sockaddr_in has a sin_len field)
+AC_TRY_COMPILE([#include <sys/types.h>
+#include <netinet/in.h>
+],[static struct sockaddr_in ac_i;int ac_j = sizeof (ac_i.sin_len); ac_j++;],
+[AC_MSG_RESULT(yes)
+ AC_DEFINE(HAVE_SIN_LEN)],
+ AC_MSG_RESULT(no))
+
 # influxdb api uses libcurl
 AC_CHECK_LIB(curl, curl_global_init,, AC_MSG_ERROR([libcurl missing]))
 
@@ -102,6 +115,10 @@ AC_CHECK_LIB(socket, socket)
 
 # Programming interface to dynamic linking loader
 AC_CHECK_LIB(dl, dlopen)
+
+AC_CHECK_HEADERS(sys/sysinfo.h)
+
+AC_CHECK_FUNCS(clock_gettime)
 
 AC_SUBST(GRIDEYE_PLUGIN_DIR, $libdir/grideye) # Bind to specific CLIgen version
 echo "LIBDIR: $libdir"

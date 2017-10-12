@@ -29,6 +29,7 @@ libdir          = @libdir@
 top_srcdir  	= @top_srcdir@
 bindir          = @bindir@
 HOST_CPU        = @host_cpu@
+HOST_VENDOR     = @host_vendor@
 #plugindir	= $(DESTDIR)$(libdir)/grideye
 plugindir	= $(DESTDIR)@GRIDEYE_PLUGIN_DIR@
 
@@ -37,6 +38,7 @@ CC	= @CC@
 CFLAGS  = -O2 -Wall -rdynamic -fPIC # Dynamic linking
 CFLAGS += -D_NOMAIN # Disable unit test main in .c files
 CFLAGS += -DPLUGINDIR=$(plugindir)
+CFLAGS += @DEFS@
 LDFLAGS = @LDFLAGS@
 INCLUDES  = -I.
 INCLUDES += -I@srcdir@
@@ -54,7 +56,9 @@ PLUGINS += grideye_wlan.so.1
 PLUGINS += grideye_iwget.so.1
 PLUGINS += grideye_sysinfo.so.1
 ifeq ($(HOST_CPU),x86_64)
+ifneq ($(HOST_VENDOR),apple)
 PLUGINS += grideye_cycles.so.1
+endif
 endif
 
 .PHONY:	all clean distclean install uninstall depend TAGS
@@ -87,9 +91,11 @@ grideye_iwget.so.1: grideye_iwget.c
 grideye_sysinfo.so.1: grideye_sysinfo.c
 	$(CC) $(CFLAGS) -shared -o $@ -lc $^ -lm
 
-ifeq ($(HOST_CPU),x86_64)
+ifeq ($(HOST_CPU),x86_64) 
+ifneq ($(HOST_VENDOR),apple)
 grideye_cycles.so.1: cycles.c cycles_test.s
 	$(CC) $(CFLAGS) -shared -o $@ -lc $^
+endif
 endif
 
 clean:

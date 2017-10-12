@@ -74,9 +74,11 @@ struct control_hdr{
 
 /* Data protocol - how to carry the measurement data */
 enum grideye_proto{
+  GRIDEYE_PROTO_ERROR=-1,
     GRIDEYE_PROTO_TCP,
     GRIDEYE_PROTO_UDP,
-    GRIDEYE_PROTO_HTTP
+    GRIDEYE_PROTO_HTTP,
+
 };
 
 /*

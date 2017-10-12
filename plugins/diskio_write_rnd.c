@@ -28,7 +28,7 @@
 
 /* Use global variables, could encapsulate in handle */
 static char    *_filename = NULL;
-static uint64_t _filesize = 0;
+static int64_t _filesize = 0;
 
 int
 diskio_write_rnd_exit(void)

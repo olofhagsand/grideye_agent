@@ -49,7 +49,13 @@
 #include <net/if.h> 
 #include <math.h> 
 #include <curl/curl.h>
+#include <sys/utsname.h>
+
+#ifdef HAVE_LINUX_SOCKIOS_H
 #include <linux/sockios.h> /* Dont remove: SIOCGIFADDR will be undefined below */
+#elif defined(HAVE_SYS_SOCKIO_H)
+#include <sys/sockio.h> /* Dont remove: SIOCGIFADDR will be undefined below */
+#endif
 
 #include <cligen/cligen.h>     /* cbuf */
 #include <clixon/clixon.h>     /* xml, xpath, log, err */
@@ -719,7 +725,7 @@ echo_packet(int            s,
     uint32_t           tag;
     cbuf              *cb = NULL; /* return payload */
     int                fromlen;
-    struct sockaddr_in from;
+    struct sockaddr_in from={0,};
     uint32_t           sseq = 0; // debug only
     uint32_t           rlen = 0;
     uint32_t           slen;
@@ -1055,6 +1061,8 @@ callhome_http(char               *url,
 	clicon_log(LOG_DEBUG, "%s getdata:%s", __FUNCTION__, getdata);
 	*natstate = 2;
 	break;
+    default:
+      break;
     }
     retval = 0;
  done:
@@ -1130,6 +1138,7 @@ nattraversal_udp(int                 s,
     return retval;
 }
 
+
 /* For linux /proc */
 #define PROC_CPUINFO "/proc/cpuinfo"
 static int
@@ -1138,6 +1147,19 @@ get_system_info(char **info)
     int   retval = -1;
     FILE *f = NULL;
     char  buf[1024];
+#ifdef __APPLE__
+    struct utsname name;
+    if (uname(&name) < 0){
+      clicon_err(OE_UNIX, errno, "uname");
+      goto done;
+    }
+    snprintf(buf, 1024, "%s %s", name.sysname, name.release);
+    if ((*info = strdup(buf))==NULL){
+      clicon_err(OE_UNIX, errno, "strdup");
+      goto done;
+    }
+#else
+
     char *line;
     char *s;
 
@@ -1155,6 +1177,7 @@ get_system_info(char **info)
 	}
 	break;
     }
+#endif
     retval = 0;
  done:
     if (f != NULL)
@@ -1362,7 +1385,7 @@ main(int   argc,
      char *argv[])
 {
     char               *argv0;
-    int                 retval;
+    int                 retval = -1;
     int                 s = -1;
     int                 c;
     struct in_addr      inaddr = {0, };
@@ -1403,10 +1426,8 @@ main(int   argc,
     char              *info = NULL;
     int                errno0;
     int                ok;
-
     /* Initialization */
     argv0 = argv[0];
-    retval = -1;
     localport = 0;
     natstate = 1;
     callhome_url = NULL;
@@ -1525,11 +1546,10 @@ main(int   argc,
     } /* while */
     clicon_log(LOG_DEBUG, "wi:%s", wi);
     /* sensd does not want an 0x%lx but parse_uint64 does */
-    snprintf(eid64str, sizeof(eid64str), "0x%jx", eid64);
+    snprintf(eid64str, sizeof(eid64str), "0x%llx", eid64);
     /* Get some system info */
     if (get_system_info(&info) < 0)
 	goto done;
-
     if (pidfile_get(GRIDEYE_AGENT_PIDFILE, &pid) < 0)
 	goto done;
     if (zap){
@@ -1539,19 +1559,18 @@ main(int   argc,
 	    unlink(pidfile);   
 	exit(0); /* OK */
     }
-    else
+    else{
 	if (pid){
 	    clicon_err(OE_DEMON, 0, "Daemon already running with pid %d\n(Try killing it with %s -z)", 
 		       pid, argv0);
 	    return -1; /* goto done deletes pidfile */
 	}
-
+    }
     /* After this point we can goto done on error 
      * Here there is either no old process or we have killed it,.. 
      */
     if (lstat(pidfile, &st) == 0)
 	unlink(pidfile);   
-
     /* Daemonize and initiate logging. Note error is initiated here to make
        demonized errors OK. Before this stage, errors are logged on stderr 
        also */
@@ -1635,12 +1654,15 @@ main(int   argc,
 	    clicon_err(OE_UNIX, errno, "socket");
 	    goto done;
 	}
+#if defined(SOL_IP)
 	if(setsockopt(s, SOL_IP, IP_RECVTTL, &yes, sizeof(int))<0){
 	    clicon_err(OE_UNIX, errno, "socket");
 	    goto done;
 	}
+#endif
 	break;
     case GRIDEYE_PROTO_HTTP:
+    default:
 	break;
     }
     /* kickstart */
@@ -1669,6 +1691,8 @@ main(int   argc,
 			      &natstate) < 0)
 		goto done;
 	break;
+    default:
+      break;
     }
     tv.tv_sec = callhome_timeout;
     for (;;){
@@ -1682,6 +1706,7 @@ main(int   argc,
 		FD_SET(s, &fdset); 
 	    break;
 	case GRIDEYE_PROTO_HTTP:
+	default:
 	    break;
 	}
 	//clicon_log(LOG_DEBUG, "Callhome timeout: %d", callhome_timeout;)
@@ -1734,6 +1759,8 @@ main(int   argc,
 	case GRIDEYE_PROTO_HTTP: /* Eeeh need timer */
 	    clicon_log(LOG_DEBUG, "Send curl Sample");
 	    break;
+	default:
+	  break;
 	}
     } /* for */
     retval = 0;

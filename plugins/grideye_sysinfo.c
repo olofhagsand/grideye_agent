@@ -5,6 +5,7 @@
  * run: 
  *   ./grideye_sysinfo
  */
+#ifdef HAVE_SYS_SYSINFO_H
 #include <stdint.h>
 #include <stdlib.h>
 #include <inttypes.h>
@@ -129,6 +130,7 @@ grideye_plugin_init_v1(int version)
 	return NULL;
     return (void*)&api;
 }
+#endif /* HAVE_SYS_SYSINFO_H */
 
 #ifndef _NOMAIN
 int main() 

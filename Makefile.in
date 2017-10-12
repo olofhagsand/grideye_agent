@@ -28,7 +28,7 @@ top_srcdir  	= @top_srcdir@
 bindir          = @bindir@
 libdir		= @libdir@
 includedir	= @includedir@
-HOST_CPU        = @host_cpu@
+HOST_VENDOR     = @host_vendor@
 
 CC	= @CC@
 CFLAGS  = @CFLAGS@  @DEFS@ -D_NOMAIN -fPIC
@@ -79,7 +79,11 @@ grideye_agent :	grideye_agent.c $(LIBOBJS)
 	$(CC) $(CFLAGS) $(INCLUDES) $< $(LDFLAGS) $(LIBOBJS) $(LIBS) -o $@ 
 
 $(MYLIB) : $(LIBOBJS)
+ifeq ($(HOST_VENDOR),apple)
+	$(CC) -shared  -undefined dynamic_lookup -o $@ $(LIBOBJS) $(LIBS)
+else
 	$(CC) -shared -o $@ $(LIBOBJS) -Wl,-soname=$(MYLIB) $(LIBS)
+endif
 
 # link-name is needed for application linking
 $(MYLIBSO) : $(MYLIB)
