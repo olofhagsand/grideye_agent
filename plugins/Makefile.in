@@ -54,6 +54,7 @@ PLUGINS += grideye_diskio_read.so.1
 PLUGINS += grideye_mem_read.so.1
 PLUGINS += grideye_wlan.so.1
 PLUGINS += grideye_iwget.so.1
+PLUGINS += grideye_airport.so.1
 PLUGINS += grideye_sysinfo.so.1
 ifeq ($(HOST_CPU),x86_64)
 ifneq ($(HOST_VENDOR),apple)
@@ -88,6 +89,9 @@ grideye_wlan.so.1: grideye_wlan.c
 grideye_iwget.so.1: grideye_iwget.c
 	$(CC) $(CFLAGS) -shared -o $@ -lc $^ -lm
 
+grideye_airport.so.1: grideye_airport.c
+	$(CC) $(CFLAGS) -shared -o $@ -lc $^ -lm
+
 grideye_sysinfo.so.1: grideye_sysinfo.c
 	$(CC) $(CFLAGS) -shared -o $@ -lc $^ -lm
 
@@ -105,7 +109,7 @@ distclean:	clean
 	rm -f Makefile *~ .depend
 
 # Special install rule for wireless tests
-install_wireless: grideye_wlan.so.1 grideye_iwget.so.1
+install_wireless: grideye_wlan.so.1 grideye_iwget.so.1 grideye_airport.so.1
 	$(INSTALL) -d $(plugindir)
 	$(INSTALL) $^ $(plugindir)
 

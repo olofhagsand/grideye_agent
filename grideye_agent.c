@@ -79,7 +79,7 @@ extern const char GRIDEYE_VERSION[];
 /* Set this to a file (prefix) and this will dump incoming binary messages */
 //#define DUMPMSGFILE "grideyedump"
 
-#define GRIDEYE_AGENT_OPTS "hDFvtqe:f:i:l:W:nu:I:N:p:rLdw:mP:z"
+#define GRIDEYE_AGENT_OPTS "hDFvtqe:f:i:a:l:W:u:I:N:p:rLdw:P:zk:"
 
 #define DISKIO_DIR        "/var/tmp"  /* in current dir */
 #define DISKIO_LARGEFILE  "GRIDEYE_LARGEFILE" /* To use for random read ops */ 
@@ -133,7 +133,8 @@ struct curlbuf{
 struct plugin{
     void                         *p_handle;
     int                           p_version;
-    char                         *p_name;
+    char                         *p_filename; /* Actual filename */
+    char                         *p_name;     /* Name corresponds to yang spec */
     int                           p_disable; /* something failed */
     struct grideye_plugin_api_v1 *p_api;
 };
@@ -181,6 +182,7 @@ grideye_plugin_load(void          *handle,
     grideye_plugin_init_t        *initfun;
     struct grideye_plugin_api_v1 *api;
     int                           len;
+    char                         *str;
 
     /* Try v1 */
     initfun = dlsym(handle, PLUGIN_INIT_FN_V1);
@@ -211,6 +213,13 @@ grideye_plugin_load(void          *handle,
     }
     memcpy(&(*plugins)[len+1], &(*plugins)[len], sizeof(struct plugin));
     (*plugins)[len].p_handle = handle;
+    if (((*plugins)[len].p_filename = strdup(name)) == NULL){
+	clicon_err(OE_UNIX, errno, "strdup");
+	goto done;
+    }
+    if ((str = index(name, '.')) != NULL)
+	*str = '\0';
+    /* Plugin name should be read for plugin itself, but use filename - ext */
     if (((*plugins)[len].p_name = strdup(name)) == NULL){
 	clicon_err(OE_UNIX, errno, "strdup");
 	goto done;
@@ -658,11 +667,11 @@ echo_application(struct sender *snd,
 	    }
 	    if (api->gp_test_fn){
 		if ((pret = api->gp_test_fn(inparam, &str)) < 0){
-		    clicon_log(LOG_NOTICE, "test fn failed: %s [%d]", p->p_name, pret);
+		    clicon_log(LOG_NOTICE, "test fn failed: %s [%d]", p->p_filename, pret);
 		    continue;
 		}
 		clicon_log(LOG_DEBUG, "%s name:%s str:%s",
-			   __FUNCTION__, p->p_name, str);
+			   __FUNCTION__, p->p_filename, str);
 		if (str){
 		    cprintf(cb, "%s", str); 
 		    free(str);
@@ -982,6 +991,8 @@ callhome_http(char               *url,
     int    haddr; /* nat addr */
     struct sender *snd = NULL; 
     struct sockaddr_in sndaddr = {0,};
+    struct plugin *p;
+    int    j;
     
     if ((cb = cbuf_new()) == NULL){
       clicon_err(OE_UNIX, errno, "cbuf_new");
@@ -1000,7 +1011,19 @@ callhome_http(char               *url,
     cprintf(cb, "&proto=%s", grideye_proto2str(proto));
     if (info)
 	cprintf(cb, "&info=\"%s\"", info);
+    /* Send comma-separated list of plugins */
+    cprintf(cb, "&plugins=\"");
+    j = 0;
+    for (p = plugins; (p->p_api!=NULL); p++){
+	if (p->p_disable)
+	    continue;
+	if (j++)
+	    cprintf(cb, ",");
+	cprintf(cb, "%s", p->p_name);
+    }
+    cprintf(cb, "\"");
     cprintf(ub, "%s/api/callhome", url);
+
     if (url_post(cbuf_get(ub), NULL, NULL, cbuf_get(cb), NULL, 
 		 &getdata, &remoteip) < 0)
 	goto done;
@@ -1279,10 +1302,13 @@ doexit(int arg)
 	handle = plugins->p_handle;
 /* Cant run exit functions here because we may run in interrupt stack */
 	for (p = plugins; (p->p_api!=NULL); p++){
+	    if (p->p_filename)
+		free(p->p_filename);
 	    if (p->p_name)
 		free(p->p_name);
 	}
 	free(plugins);
+	plugins = NULL;
 	if (handle)
 	    dlclose(handle);
     }
@@ -1353,29 +1379,32 @@ usage(char *argv0)
     	    "\t-F \t\tRun in foreground and log to stderr\n"
 	    "\t-v \t\tPrint version\n" 
 	    "\t-q \t\tQuiet\n" 
-	    "\t-t <s> \t\tCallhome timeout in seconds (if idle) (default:%d)\n"   	   "\t-z \tKill other config daemon and exit\n"
 	    "\t-e <eid64> \tDevice identifier (random if not given)\n" 
+	    "\t-t <s> \t\tCallhome timeout in seconds (if idle) (default:%d)\n"
 	    "\t-f <filename>\tLog to file\n"
-	    "\t-a <host>\t(Local) hostname or IPv4 address to listen to (see -i) \n"
 	    "\t-i <ifname>\t(Local) receiving interface name (see -a)\n"
+	    "\t-a <host>\t(Local) hostname or IPv4 address to listen to (see -i) \n"
 	    "\t-l <port> Local port\n"
-	    //	    "\t-n Nat traversal: send udp packets in reverse if no rx traffic in -t s\n"
+	    "\t-W <dir> \tWorking directory for disk i/o (default: %s). Two\n"
+	    "\t\t\tfiles will be created, %s and %s\n"
 	    "\t-u <url>\tCall home URL. Send if no rx traffic in -t s\n"
 	    "\t-I <id>\t\tId to use with -u\n"
 	    "\t-N <name>\tName to use in logs and callhome. default is hostname\n"
 	    "\t-p udp|tcp|http\tData protocol to use with -u\n"
-	    "\t-W <dir> \tWorking directory for disk i/o (default: %s). Two files will be created, %s and %s\n"
-	    "\t-L \t\tSynthetic loss of pkt 20\n"
 	    "\t-r \t\tSynthetic reorder of pkt 30\n"
+	    "\t-L \t\tSynthetic loss of pkt 20\n"
 	    "\t-d \t\tSynthetic duplicate of pkt 40\n"
 	    "\t-w [ifname]\tWireless interface\n"
-	    "\t-P <dir>\tPlugin directory(default: %s)\n",
+	    "\t-P <dir>\tPlugin directory(default: %s)\n"
+	    "\t-z \t\tKill other config daemon and exit\n"
+	    "\t-k <pidfile> \tPidfile, default: %s\n",
 	    argv0,
 	    CALLHOME_DEFAULT,
 	    DISKIO_DIR,
 	    DISKIO_LARGEFILE,
 	    DISKIO_WRITEFILE,
-	    PLUGINDIR
+	    PLUGINDIR,
+	    GRIDEYE_AGENT_PIDFILE
 	    );
     exit(0);
 }
@@ -1426,6 +1455,8 @@ main(int   argc,
     char              *info = NULL;
     int                errno0;
     int                ok;
+    char               pidfile[MAXPATHLEN];
+
     /* Initialization */
     argv0 = argv[0];
     localport = 0;
@@ -1449,14 +1480,14 @@ main(int   argc,
     plugins = NULL;
     foreground = 0;
     proto = GRIDEYE_PROTO_UDP;
+    strncpy(pidfile, GRIDEYE_AGENT_PIDFILE, sizeof(pidfile)-1);
+
     /* Hostname for logs and callbacks, overwritten by -N */
     if (gethostname(hostname, sizeof(hostname)) < 0) {
 	clicon_err(OE_UNIX, errno, "gethostname");
 	exit(0);
     }
-
     clicon_log_init("grideye_agent", LOG_INFO, CLICON_LOG_STDERR); 
-
     while ((c = getopt(argc, argv, GRIDEYE_AGENT_OPTS)) != -1){
 	switch (c) {
 	case 'h' : /* help */
@@ -1473,11 +1504,11 @@ main(int   argc,
 	    fprintf(stderr, "%s\n", GRIDEYE_BUILDSTR);
 	    exit(0);
 	    break;
-	case 'q' : /* be (more) quiet */
-	    quiet++;
-	    break;
 	case 't' : /* callhome timeout */
 	    callhome_timeout = atoi(optarg);
+	    break;
+	case 'q' : /* be (more) quiet */
+	    quiet++;
 	    break;
 	case 'e' : /* eid */
 	    eid64 = atoll(optarg);
@@ -1505,9 +1536,6 @@ main(int   argc,
 	case 'W':    /* Disk I/O directory */
 	    diskio_dir = optarg;
 	    break;
-	case 'n':    /* Nat traversal for udp <addr>:<port> */
-	    //	    natstate = 1; /* enabled but not active */
-	    break;
 	case 'u':    /* URL used with callback */
 	    callhome_url = optarg;
 	    break;
@@ -1524,11 +1552,11 @@ main(int   argc,
 		usage(argv0);
 	    }
 	    break;
-	case 'L':    /* Synthetic loss */
-	    loss = 20;
-	    break;
 	case 'r':    /* Synthetic reorder */
 	    reorder = 30;
+	    break;
+	case 'L':    /* Synthetic loss */
+	    loss = 20;
 	    break;
 	case 'd':    /* Synthetic duplicate */
 	    duplicate = 40;
@@ -1542,6 +1570,9 @@ main(int   argc,
 	case 'z': /* Zap other process */
 	    zap++;
 	    break;
+	case 'k':    /* PID file*/
+	    strncpy(pidfile, optarg, sizeof(pidfile)-1);
+	    break;
 	} /* switch */
     } /* while */
     clicon_log(LOG_DEBUG, "wi:%s", wi);
@@ -1550,7 +1581,7 @@ main(int   argc,
     /* Get some system info */
     if (get_system_info(&info) < 0)
 	goto done;
-    if (pidfile_get(GRIDEYE_AGENT_PIDFILE, &pid) < 0)
+    if (pidfile_get(pidfile, &pid) < 0)
 	goto done;
     if (zap){
 	if (pid && pidfile_zapold(pid) < 0)
@@ -1613,7 +1644,7 @@ main(int   argc,
 		clicon_log(LOG_NOTICE, "grideye_agent: plugin files: %s %s", 
 			   diskio_writefile, diskio_largefile);
 		clicon_log(LOG_NOTICE, "Disable plugin %s: %s", 
-			   p->p_name, strerror(errno));
+			   p->p_filename, strerror(errno));
 	    }
 	}
     }
@@ -1767,17 +1798,6 @@ main(int   argc,
  done:
     if (s != -1)
 	close(s);
-#if 0
-    /* XXX free also plugins */
-    for (p = plugins; (api=p->p_api)!=NULL; p++){
-	if (api->gp_exit_fn)
-	    api->gp_exit_fn();
-	if (p->p_name)
-	    free(p->p_name);
-    }
-    while (s_list != NULL)
-	s_rm(s_list);
-#endif
 #if 0
     if (callhome_url && name && userid){     /* Timeout Send a (call)home message */
 	if (callhome_http(callhome_url, name, userid, proto, localport, info,
