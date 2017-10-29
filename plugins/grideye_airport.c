@@ -6,28 +6,22 @@
  *   ./grideye_airport
 Program att använda:
 $ /System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport -I
-    agrCtlRSSI: -44
+    agrCtlRSSI: -44 - wlevel
     agrExtRSSI: 0
-   agrCtlNoise: -92
-   agrExtNoise: 0
+   agrCtlNoise: -92 - wnoise
+   agrExtNoise: 0 
          state: running
        op mode: station
-    lastTxRate: 878
-       maxRate: 217
+    lastTxRate: 878 - new plot
+       maxRate: 217 - ~iwproto
 lastAssocStatus: 0
    802.11 auth: open
      link auth: wpa2
-         BSSID: 58:b6:33:79:3e:7c
-          SSID: eduroam
-           MCS: 7
-       channel: 124,80 
+         BSSID: 58:b6:33:79:3e:7c - iwaddr
+          SSID: eduroam - iwessid?
+           MCS: 7 - new plot
+       channel: 124,80 - iwchan
 
-
-De värdena som är av intresse är:
-agrCtlRSSI = signalstyrka (wlevel)
-agrCtlNoise = brusstryka (wnoise)
-BSSID = AP mac (iwaddr)
-channel = kanal (iwchan), kanalbredd
  */
 #include <stdint.h>
 #include <stdlib.h>
@@ -38,6 +32,7 @@ channel = kanal (iwchan), kanalbredd
 #include <string.h>
 #include <errno.h>
 #include <math.h>
+#include <ctype.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
 
@@ -58,8 +53,7 @@ airport_exit(void)
 
 /*! Fork and exec a iwget process
  * @param[in]  prog   Program to exec, eg iwgetid
- * @param[in]  arg1   First argument, eg device
- * @param[in]  arg2   Second argument argument, eg -a, -c, -f, p or NULL
+ * @param[in]  arg1   First argument, eg -I
  * @param[in]  buf    Buffer to store output from process
  * @param[in]  buflen Length of buffer
  * @retval -1         Error
@@ -69,10 +63,9 @@ airport_exit(void)
  */
 static int 
 airport_fork(const char *prog,
-	   const char *arg1,
-	   const char *arg2,
-	   char       *buf,
-	   int         buflen)
+	     const char *arg1,
+	     char       *buf,
+	     int         buflen)
 {
     int     retval = -1;
     int     stdin_pipe[2];
@@ -111,7 +104,6 @@ airport_fork(const char *prog,
 
 	if (execl(prog, prog, 
 		  arg1,
-		  arg2,
 		  (void*)0) < 0){
 	    perror("execl");
 	    return -1;
@@ -136,125 +128,145 @@ airport_fork(const char *prog,
     return retval;
 }
 
-/*!
- * @param[in]  p      The string to use (+ offset)
- * @param[in]  offset Added offset on string
- * XXX: Why remove and then add double quotes?
+/*! FInd a keyword in buf and write value after colon into string
+ * @param[in]  buf    Input buffer
+ * @param[out] argv  
+ * @param[out] argc
+ * Assume format: 
+ * space* <key>: <value>
  */
 static int
-stringadd(char  *p,
-	  int    offset,
-	  char  *keyword,
-	  char **s0,
-	  int   *s0len)
+airport_buf2argv(char  *buf,
+		 char ***argv,
+		 int   *argc)
 {
-    int retval = -1;
-    int slen;
+    int  retval = -1;
+    char *p=buf;
+    char *line;
+    char *key;
+    char *val;
 
-    if (p==NULL)
-	return 0;
-    p += offset;
-    if (p[0] == '\"')
-	p++;
-    /* Strip optional " if they exists and add them (again) below */
-    if (p[strlen(p)-1] == '\"')
-	p[strlen(p)-1] = '\0';
-    slen = strlen(p)+2*strlen(keyword)+5+2; /* 7 is <>""</>  */
-    if ((*s0 = realloc(*s0, *s0len+slen+1)) == NULL){
-	perror("realloc");
-	goto done;
-    }	
-    /* Always add double quotes (may have been removed above) */
-    snprintf(*s0+*s0len, slen+1, "<%s>\"%s\"</%s>", keyword, p, keyword);
-    *s0len += slen;
+    while ((line = strsep(&p, "\n")) != NULL){
+      if ((val = index(line, ':')) != NULL){
+	*val++ = '\0';
+	/* trim spaces */
+	while (strlen(val) && isblank(*val))
+	  val++;
+	key = line;
+	while (strlen(key) && isblank(*key))
+	  key++;
+	*argc += 2;
+	if ((*argv = realloc(*argv, (*argc)*sizeof(char*))) == NULL){
+ 	   perror("realloc");
+	   goto done;
+	}
+	(*argv)[*argc-2] = key;
+	(*argv)[*argc-1] = val;
+      }
+    }
     retval = 0;
  done:
     return retval;
+}
+
+char *
+find_key(char **argv, 
+	 int    argc, 
+	 char  *key)
+{
+  for (;(argc>0)&& *argv; argc-=2, argv+=2){
+      if (strcmp(key, argv[0])==0)
+	return argv[1];
+  }
+    return NULL;
 }
 
 /*! Poll /proc wireless file for device status 
- * @param[out]  outstr  XML string with three parameters described below
+ * @param[out]  outstr  XML string with result parameters 
  * The string contains the following parameters (or possibly a subset):
- * iwessid
- * iwaddr
- * iwchan
- * iwfreq
- * iwproto
  */
 int  
-airport_test(int       dummy,
+airport_test(int     dummy,
 	  char     **outstr)
 {
-    int             retval = -1;
-    char            buf[256];
-    int             buflen = sizeof(buf);
-    int             len;
-    char           *s0=NULL; /* whole string */
-    int             s0len=0; /* length of whole string */
-    char           *p;
+    int         retval = -1;
+    char        buf[1024];
+    int         buflen = sizeof(buf);
+    int         len;
+    char      **argv=NULL;
+    int         argc = 0;
+    char       *str = NULL;
+    int         slen;
+    char       *wlevel;
+    char       *wnoise;
+    char       *wlastTxRate;
+    char       *iwproto;
+    char       *iwaddr;
+    char       *iwessid;
+    char       *wMCS;
+    char       *iwchan;
 
-    /* 
-     *  The fork code executes iwgetid and returns a string
+    /* The fork code executes airport and returns a string
      */
     buflen = sizeof(buf);
-    if ((len = airport_fork(_airport_prog, _device, "-r", buf, buflen)) < 0)
+    if ((len = airport_fork(_airport_prog, "-I", buf, buflen)) < 0)
 	goto done;
-    if (len && stringadd(buf, 0, "iwessid", &s0, &s0len) < 0)
+    if (len==0)
+      goto ok;
+    if (airport_buf2argv(buf, &argv, &argc) < 0)
 	goto done;
-
-    if ((len = airport_fork(_airport_prog, _device, "-a", buf, buflen)) < 0)
-	goto done;
-    if (len && stringadd(rindex(buf, ' '), 1, "iwaddr", &s0, &s0len) < 0)
-	goto done;
-
-    if ((len = airport_fork(_airport_prog, _device, "-c", buf, buflen)) < 0)
-	goto done;
-    if (len && stringadd(rindex(buf, ':'), 1, "iwchan", &s0, &s0len) < 0)
-	goto done;
-    
-    if ((len = airport_fork(_airport_prog, _device, "-f", buf, buflen)) < 0)
-	goto done;
-    /* Strange: sometimes ':', sometimes '=' */
-    if ((p = rindex(buf, ':')) == NULL)
-	p = rindex(buf, '=');
-    if (len && stringadd(p, 1, "iwfreq", &s0, &s0len) < 0)
-	goto done;
-
-    if ((len = airport_fork(_airport_prog, _device, "-p", buf, buflen)) < 0)
-	goto done;
-    if (len && stringadd(rindex(buf, ':'), 1, "iwproto", &s0, &s0len) < 0)
-	goto done;
-    *outstr = s0;
-    retval = 0;
- done:
-    return retval;
-}
-
-/*! Init grideye test module. Check if file exists that is used for polling state */
-int 
-airport_file(const char *filename, 
-	   const char *largefile,
-	   const char *device)
-{
-    int         retval = -1;
-
-    if (device == NULL){
-	errno = EINVAL;
-	goto done;
+    wlevel = find_key(argv, argc, "agrCtlRSSI");
+    wnoise = find_key(argv, argc, "agrCtlNoise");
+    wlastTxRate = find_key(argv, argc, "lastTxRate");
+    iwproto = find_key(argv, argc, "maxRate");
+    iwaddr = find_key(argv, argc, "BSSID");
+    iwessid = find_key(argv, argc, "SSID");
+    wMCS = find_key(argv, argc, "MCS");
+    iwchan = find_key(argv, argc, "channel");
+    if ((slen = snprintf(NULL, 0, 
+			 "<wlevel>%s</wlevel>"
+			 "<wnoise>%s</wnoise>"
+			 "<wlastTxRate>%s</wlastTxRate>"
+			 "<iwproto>%s</iwproto>"
+			 "<iwaddr>\"%s\"</iwaddr>"
+			 "<iwessid>\"%s\"</iwessid>"
+			 "<wMCS>%s</wMCS>"
+			 "<iwchan>%s</iwchan>",
+			 wlevel, wnoise, wlastTxRate,
+			 iwproto, iwaddr, iwessid,
+			 wMCS, iwchan)) <= 0)
+       goto done;
+    if ((str = malloc(slen+1)) == NULL){
+       perror("malloc");
+       goto done;
     }
-    if ((_device = strdup(device)) == NULL)
-	goto done;
+    if ((slen = snprintf(str, slen+1, 
+			 "<wlevel>%s</wlevel>"
+			 "<wnoise>%s</wnoise>"
+			 "<wlastTxRate>%s</wlastTxRate>"
+			 "<iwproto>%s</iwproto>"
+			 "<iwaddr>\"%s\"</iwaddr>"
+			 "<iwessid>\"%s\"</iwessid>"
+			 "<wMCS>%s</wMCS>"
+			 "<iwchan>%s</iwchan>",
+			 wlevel, wnoise, wlastTxRate,
+			 iwproto, iwaddr, iwessid,
+			 wMCS, iwchan)) <= 0)
+       goto done;
+    *outstr = str;
+ ok:
     retval = 0;
  done:
     return retval;
 }
+
 
 static const struct grideye_plugin_api_v1 api = {
     1,
     GRIDEYE_PLUGIN_MAGIC,
     airport_exit,
     airport_test,
-    airport_file, /* file callback */
+    NULL,       /* file callback */
     NULL,       /* input param */
     "xml"       /* output format */
 };
@@ -278,8 +290,6 @@ int main()
     char   *str = NULL;
 
     if (grideye_plugin_init_v1(1) < 0)
-	return -1;
-    if (airport_file(NULL, NULL, "wlan0") < 0)
 	return -1;
     if (airport_test(0, &str) < 0)
 	return -1;
