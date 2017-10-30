@@ -56,6 +56,7 @@ PLUGINS += grideye_wlan.so.1
 PLUGINS += grideye_iwget.so.1
 PLUGINS += grideye_airport.so.1
 PLUGINS += grideye_sysinfo.so.1
+PLUGINS += grideye_http.so.1
 ifeq ($(HOST_CPU),x86_64)
 ifneq ($(HOST_VENDOR),apple)
 PLUGINS += grideye_cycles.so.1
@@ -93,6 +94,9 @@ grideye_airport.so.1: grideye_airport.c
 	$(CC) $(CFLAGS) -shared -o $@ -lc $^ -lm
 
 grideye_sysinfo.so.1: grideye_sysinfo.c
+	$(CC) $(CFLAGS) -shared -o $@ -lc $^ -lm
+
+grideye_http.so.1: grideye_http.c
 	$(CC) $(CFLAGS) -shared -o $@ -lc $^ -lm
 
 ifeq ($(HOST_CPU),x86_64) 
