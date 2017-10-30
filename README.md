@@ -61,67 +61,67 @@ Grideye_agent contains an open plugin interface.  Several plugins
 are included in this release. Other authors have (and can) contribute
 to the plugins. 
 
-The following steps illustrates how to add an example plugin to
-grideye_agent and how to wrap it to produce input to grideye. The
-example plugin is a Nagios plugin: 'check_http' plugin, see
-[https://www.monitoring-plugins.org/doc/man/check_http.html]. There
-are lots of Nagios plugins making it an easy way to extend Grideye.
+The following steps illustrate how to add the Nagios (*check_http*)[https://www.monitoring-plugins.org/doc/man/check_http.html]
+test plugin and how to incorporate it to produce input to
+grideye. 
+There are lots of Nagios plugins making it an easy way to extend Grideye.
 
 ### 3.1 The API
 
-A grideye plugin is a dynamically loaded plugin written in C. You need
-to define a couple of functions, compile it, place it in a directory,
-and then start grideye_agent.
+A grideye plugin is a dynamically loaded plugin written in C. You
+write a file with a couple of functions, compile it, place it in a
+directory, and restart grideye_agent.
 
-First, a grideye plugin must have the function:
-grideye_plugin_init_v1() which returns an API table containing functions pointers. Later versions of this API willprobably appear.
+A grideye plugin has a pre-defined function *grideye_plugin_init_v1()*
+which returns a table containing API functions.
 
-The API table is as follows (all of the functions are optional):
+The API table is as follows:
 
 Symbol | Type | Mandatory |Description
 --- | --- | --- | ---
 gp_version | Variable | Yes | Must be 1
-gp_magic | Variable | Yes | Should be 0x3f687f03
-gp_exit_fn | Function | No | An optional exit function
+gp_magic | Variable | Yes | Must be 0x3f687f03
+gp_exit_fn | Function | No | An exit function
 gp_test_fn | Function | Yes | The actual test function with input and output parameters.
 gp_file_fn | Function | No | Predefined files and devices may be used in tests.
-gp_input | Variable | Yes | Input parameter requested
+gp_input | Variable | Yes | Name of input parameter requested
 gp_output | Variable | Yes | Format of output. Only "xml" supported
 
-### 3.2 Identifying the input - parameters
+### 3.2 Identifying the input: parameters
 
 check_http has lots of parameters. You can hardcode most, or leave as
 defaults.
 
 ```
    check_http -H www.youtube.com -S
-   HTTP OK: HTTP/1.1 200 OK - 495051 bytes in 1.751 second response time |time=1.751042s;;;0.000000 size=495051B;;;0
+   HTTP OK: HTTP/1.1 200 OK - 495051 bytes in 1.751 second response time |
+   time=1.751042s;;;0.000000 size=495051B;;;0
 ```
 
-In this example, we have chosen the 'host' parameter as dynamically
-configurable, which means we can dynamically change it in Grideye testcases.
+In this example, the *host* parameter as chosen as dynamically
+configurable, which means it can dynamically change in a Grideye testcase.
 
-This means we define 'gp_input=host' and gp_test_fn is called with 'host' as input parameter, example:
+This means 'gp_input=host' is defined in the plugin and gp_test_fn is called with 'host' as input parameter, example:
 
 ```
    gp_test_fn("www.youtube.com", ...)
 ```
 
-### 3.3 Identifying the output - metrics
+### 3.3 Identifying the output: metrics
 
 check_http has several outputs, such as the status (200 OK), size and
 latency. The test function is written so that it outputs an XML string
 such as:
 
 ```
-   <htime>1.751042</htime><hsize>495051</hsize><hstatus>200 OK</hstatus>
+   <htime>1751</htime><hsize>495051</hsize><hstatus>200 OK</hstatus>
 ```
 
 ### 3.4 Defining metrics in YANG
 
-The three 'metrics' (time, size, status) need to be defined in the
-Grideye YANG model as well, so that they can be handled by the grideye
-controller.  These entries are added to the grideye YANG model as follows:
+The three metrics: htime, hsize, hstatus need to be defined in the
+Grideye YANG model, so that the Grideye controller can interpret them.
+These entries are added to the grideye YANG model as follows:
 
 ```
    module grideye-result {
@@ -146,16 +146,21 @@ controller.  These entries are added to the grideye YANG model as follows:
    }
 ```
 
-Thereafter, the grideye controller needs to be restarted. Note that
-there is already a wide variety of metrics available and you can most
-likely use already existing.
+Note that hstatus is string, and therefore cannot be plotted, but can
+be used as event (if changed). Note also that htime has been defined
+in milliseconds to avoid floating point numbers. Floats can be used but are more complex to handle.
+
+If the YANG model is changed, the grideye *controller* is restarted.
+
+Note that there already exists a large number of metrics and you can
+most likely use already existing metrics.
 
 ### 3.5 Writing the test function
 
-It is straightforward to run the test: you need to spawn the Nagios
-plugin and the parse the data. In C, this is a little painful, but
-with help of a help function, this is (a simplified way) to write
-it. The full code can be found in (plugins/grideye_http.c):
+The test function is straightforward: Spawn the Nagios plugin and 
+parse the data. In C, this is a little painful, but with help of a
+help function, this is (a simplified way) to write it. The full code
+can be found in (plugins/grideye_http.c):
 
 ```
    int
@@ -180,9 +185,8 @@ it. The full code can be found in (plugins/grideye_http.c):
    
 ### 3.6 Local test run
 
-Once the plugin source code has been written, it is possible to run
-the test as stand-alone. This is useful for verifying, validating and
-debugging the test:
+Once the plugin code has been written, you can run the test as
+stand-alone. This is useful for verifying, validating and debugging:
 
 ```
    gcc -o grideye_http grideye_http.c
@@ -192,14 +196,15 @@ debugging the test:
 
 ### 3.7 Full grideye run
 
-When completed, the grideye plugin is compiled into a loadable module:
-'grideye_http.so.1', installed under /usr/local/lib/grideye and the grideye_agent is restarted:
+The grideye plugin is compiled into a loadable module:
+'grideye_http.so.1', and installed under /usr/local/lib/grideye and the grideye_agent is restarted:
 
 ```
    sudo systemctl restart grideye_agent.service
 ```
 
-And the new metrics appears in the grideye controller, for plotting, alarming and analysis.
+The new metrics appears in the grideye controller, for plotting, alarming and analysis.
+
 
 ## 4. Licenses
 
