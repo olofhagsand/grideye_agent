@@ -3,11 +3,11 @@ Cloud monitoring agent.
 
 ## Table of contents
 
-  * [Starting](#starting)
-  * [Installation](#installation)
-  * [Plugins](#plugins)
-  * [Licenses](#licenses)
-  * [Contact](#contact)
+  * [Starting](#1-starting)
+  * [Installation](#2-installation)
+  * [Plugins](#3-plugins)
+  * [Licenses](#4-licenses)
+  * [Contact](#5-contact)
 
 Grideye_agent is part of grideye cloud monitoring software. Grideye consists of a controller, a dashboard, and agents. This is the agent part.  
 
@@ -114,7 +114,7 @@ latency. The test function is written so that it outputs an XML string
 such as:
 
 ```
-   <httptime>1.751042</httptime><httpsize>495051</httpsize><httpstatus>200 OK</httpstatus>
+   <htime>1.751042</htime><hsize>495051</hsize><hstatus>200 OK</hstatus>
 ```
 
 ### 3.4 Defining metrics in YANG
@@ -128,16 +128,16 @@ controller.  These entries are added to the grideye YANG model as follows:
       ...
       grouping metrics{
          ...
-         leaf httpstatus{
+         leaf hstatus{
             description "HTTP status code";
             type string;
 	 }
-         leaf httptime{
+         leaf htime{
             description "HTTP request time";
             type int32;
             units ms;
          }
-         leaf httpsize{
+         leaf hsize{
             description "HTTP response size";
             type int32;
             units bytes;
@@ -155,7 +155,7 @@ likely use already existing.
 It is straightforward to run the test: you need to spawn the Nagios
 plugin and the parse the data. In C, this is a little painful, but
 with help of a help function, this is (a simplified way) to write
-it. The full code can be found in [plugins/grideye_http.c]:
+it. The full code can be found in (plugins/grideye_http.c):
 
 ```
    int
@@ -167,9 +167,9 @@ it. The full code can be found in [plugins/grideye_http.c]:
       sscanf(buf, "%*s %*s %*s %s %s %*s %d %*s %*s %lf\n",
             code0, code1, &size, &time);
       if ((slen = snprintf(*outstr, slen,
-                         "<httpstatus>%s %s</httpstatus>"
-                         "<httptime>%d</httptime>"
-                         "<httpsize>%d</httpsize>",
+                         "<hstatus>\"%s %s\"</hstatus>"
+                         "<htime>%d</htime>"
+                         "<hsize>%d</hsize>",
                          code0, code1,
                          (int)(time*1000),
                          size)) <= 0)
@@ -187,7 +187,7 @@ debugging the test:
 ```
    gcc -o grideye_http grideye_http.c
    ./grideye_http 
-   <httpstatus>200 OK</httpstatus><httptime>1430</httptime><httpsize>491172</httpsize>
+   <hstatus>"200 OK"</hstatus><htime>1430</htime><hsize>491172</hsize>
 ```
 
 ### 3.7 Full grideye run
