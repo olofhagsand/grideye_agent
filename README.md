@@ -1,7 +1,13 @@
 # Grideye_agent
 Cloud monitoring agent. 
 
-[TOC]
+## Table of contents
+
+  * [Starting](#starting)
+  * [Installation](#installation)
+  * [Plugins](#plugins)
+  * [Licenses](#licenses)
+  * [Contact](#contact)
 
 Grideye_agent is part of grideye cloud monitoring software. Grideye consists of a controller, a dashboard, and agents. This is the agent part.  
 
@@ -11,7 +17,7 @@ Some documentation about grideye architecture can be found at
 The grideye agent can be run in a process, in a VM or in a
 container. It communicates with a grideye controller. 
 
-## Starting
+## 1. Starting
 
 When started, a grideye_agent typically makes a 'callhome' to an existing
 grideye controller.
@@ -27,7 +33,7 @@ where
 
 As an alternative grideye_agent can be run as a docker container.
 
-## Installation
+## 2. Installation
 
 A typical installation is as follows:
 
@@ -49,7 +55,7 @@ Grideye_agent requires [CLIgen](http://www.cligen.se) and [CLIXON](http://www.cl
        sudo make install; 
        sudo make install-include
 
-## Plugins tutorial
+## 3. Plugins
 
 Grideye_agent contains an open plugin interface.  Several plugins
 are included in this release. Other authors have (and can) contribute
@@ -61,7 +67,7 @@ example plugin is a Nagios plugin: 'check_http' plugin, see
 [https://www.monitoring-plugins.org/doc/man/check_http.html]. There
 are lots of Nagios plugins making it an easy way to extend Grideye.
 
-### The API
+### 3.1 The API
 
 A grideye plugin is a dynamically loaded plugin written in C. You need
 to define a couple of functions, compile it, place it in a directory,
@@ -82,35 +88,42 @@ gp_file_fn | Function | No | Predefined files and devices may be used in tests.
 gp_input | Variable | Yes | Input parameter requested
 gp_output | Variable | Yes | Format of output. Only "xml" supported
 
-### Identifying the input - parameters
+### 3.2 Identifying the input - parameters
 
 check_http has lots of parameters. You can hardcode most, or leave as
 defaults.
 
+```
    check_http -H www.youtube.com -S
    HTTP OK: HTTP/1.1 200 OK - 495051 bytes in 1.751 second response time |time=1.751042s;;;0.000000 size=495051B;;;0
-   
+```
+
 In this example, we have chosen the 'host' parameter as dynamically
 configurable, which means we can dynamically change it in Grideye testcases.
 
 This means we define 'gp_input=host' and gp_test_fn is called with 'host' as input parameter, example:
 
-   gp_test_fn("www.youtibe.com", ...)
+```
+   gp_test_fn("www.youtube.com", ...)
+```
 
-### Identifying the output - metrics
+### 3.3 Identifying the output - metrics
 
 check_http has several outputs, such as the status (200 OK), size and
 latency. The test function is written so that it outputs an XML string
 such as:
 
+```
    <httptime>1.751042</httptime><httpsize>495051</httpsize><httpstatus>200 OK</httpstatus>
+```
 
-### Defining metrics in YANG
+### 3.4 Defining metrics in YANG
 
 The three 'metrics' (time, size, status) need to be defined in the
 Grideye YANG model as well, so that they can be handled by the grideye
 controller.  These entries are added to the grideye YANG model as follows:
 
+```
    module grideye-result {
       ...
       grouping metrics{
@@ -131,18 +144,20 @@ controller.  These entries are added to the grideye YANG model as follows:
          }
       }
    }
+```
 
 Thereafter, the grideye controller needs to be restarted. Note that
 there is already a wide variety of metrics available and you can most
 likely use already existing.
 
-### Writing gp_test_fn
+### 3.5 Writing the test function
 
 It is straightforward to run the test: you need to spawn the Nagios
 plugin and the parse the data. In C, this is a little painful, but
 with help of a help function, this is (a simplified way) to write
 it. The full code can be found in [plugins/grideye_http.c]:
 
+```
    int
    http_test(int        host,
              char     **outstr)
@@ -161,32 +176,36 @@ it. The full code can be found in [plugins/grideye_http.c]:
           goto done;
       return 0; 
    }
-
+```
    
-### Local test run
+### 3.6 Local test run
 
 Once the plugin source code has been written, it is possible to run
 the test as stand-alone. This is useful for verifying, validating and
 debugging the test:
 
+```
    gcc -o grideye_http grideye_http.c
    ./grideye_http 
    <httpstatus>200 OK</httpstatus><httptime>1430</httptime><httpsize>491172</httpsize>
+```
 
-### Full grideye run
+### 3.7 Full grideye run
 
 When completed, the grideye plugin is compiled into a loadable module:
 'grideye_http.so.1', installed under /usr/local/lib/grideye and the grideye_agent is restarted:
 
+```
    sudo systemctl restart grideye_agent.service
+```
 
 And the new metrics appears in the grideye controller, for plotting, alarming and analysis.
 
-## Licenses
+## 4. Licenses
 
 Grideye_agent is covered by GPLv3, _except_ the plugins that are
 covered by copyright and licenses in their source code header (if any).
 
-## Contact
+## 5. Contact
 
 I can be found at olof@hagsand.se.
