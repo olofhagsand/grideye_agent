@@ -12,7 +12,7 @@ Cloud monitoring agent.
 Grideye_agent is part of grideye cloud monitoring software. Grideye consists of a controller, a dashboard, and agents. This is the agent part.  
 
 Some documentation about grideye architecture can be found at
-     http://grideye.nordu.net/arch
+     http://grideye.sunet.se/arch
 
 The grideye agent can be run in a process, in a VM or in a
 container. It communicates with a grideye controller. 
