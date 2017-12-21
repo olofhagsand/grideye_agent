@@ -1,1 +1,3 @@
-Utility files. rc.init script to start a grideye_agent
+Utility files.
+	grideye_agent          rc.init script
+	grideye_agent.service  SystemD script

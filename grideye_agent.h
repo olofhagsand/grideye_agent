@@ -25,8 +25,6 @@
 #define TWOWAY_TAG  0xcf30e506
 #define PROTO_VERSION 4
 
-#define GRIDEYE_AGENT_VERSION 0
-
 /*
  * Types
  */

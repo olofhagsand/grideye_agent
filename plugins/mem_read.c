@@ -16,24 +16,33 @@
 #include <unistd.h>
 #include <sys/time.h>
 
-#include "grideye_plugin_v1.h"
+#include "grideye_plugin_v2.h"
 
 static int debug = 0;
 
 /* Compute a 2^log that is highest number not more than 50% of memory */
 static int _log = 0;
 
-int 
-mem_read_exit(void)
-{
-  return 0;
-}
+/* Forward */
+int mem_read_test(char *instr, char **outstr);
+
+
+static const struct grideye_plugin_api_v2 api = {
+    2,
+    GRIDEYE_PLUGIN_MAGIC,
+    "mem_read",
+    NULL,            /* input format */
+    "xml",            /* output format */
+    NULL,
+    mem_read_test,
+    NULL
+};
 
 long mem_read_test1(int logsize);
 
 int  
-mem_read_test(int       dummy, 
-	      char    **outstr)
+mem_read_test(char    *instr, 
+	      char   **outstr)
 {
     int             retval = -1;
     struct timeval  t0;
@@ -64,20 +73,10 @@ mem_read_test(int       dummy,
     return retval;
 }
 
-static const struct grideye_plugin_api_v1 api = {
-    1,
-    GRIDEYE_PLUGIN_MAGIC,
-    mem_read_exit,
-    mem_read_test,
-    NULL, /* file fn */
-    NULL, /* input param */
-    "xml" /* output format */
-};
-
 
 /* Grideye agent plugin init function must be called grideye_plugin_init */
 void *
-grideye_plugin_init_v1(int version)
+grideye_plugin_init_v2(int version)
 {
     long     page_size;
     long     num_pages;
@@ -111,7 +110,7 @@ int main()
 {
     char   *str = NULL;
 
-    if (grideye_plugin_init_v1(1) == NULL)
+    if (grideye_plugin_init_v2(2) == NULL)
 	return -1;
     if (mem_read_test(0, &str) < 0)
 	return -1;

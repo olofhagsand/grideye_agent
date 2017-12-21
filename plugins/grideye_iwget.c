@@ -26,13 +26,32 @@
 #include <string.h>
 #include <errno.h>
 #include <math.h>
+#include <stdarg.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
 
-#include "grideye_plugin_v1.h"
+#include "grideye_plugin_v2.h"
 
 static const char *_iwgetprog = "/sbin/iwgetid";
 static char *_device = NULL;
+
+/* Forward */
+int iwget_exit(void);
+int iwget_test(char *instr, char **outstr);
+int iwget_setopt(const char *optname, char *value);
+/*
+ * This is the API declaration
+ */
+static const struct grideye_plugin_api_v2 api = {
+    2,
+    GRIDEYE_PLUGIN_MAGIC,
+    "iwget",
+    NULL,            /* input format */
+    "xml",            /* output format */
+    iwget_setopt,
+    iwget_test,
+    iwget_exit
+};
 
 int 
 iwget_exit(void)
@@ -44,23 +63,21 @@ iwget_exit(void)
     return 0;
 }
 
-/*! Fork and exec a iwget process
- * @param[in]  prog   Program to exec, eg iwgetid
- * @param[in]  arg1   First argument, eg device
- * @param[in]  arg2   Second argument argument, eg -a, -c, -f, p or NULL
- * @param[in]  buf    Buffer to store output from process
- * @param[in]  buflen Length of buffer
- * @retval -1         Error
- * @retval  n         Number of bytes read
+/*! Fork and exec a process and read output from stdout
+ * @param[out]  buf    Buffer to store output from process
+ * @param[in]   buflen Length of buffer
+ * @param[in]   ...    Variable argument list
+ * @retval -1          Error. Error string in buf
+ * @retval  n          Number of bytes read
  * @note Assume that the output (if any) is terminated by a LF/CR, or some other
  * non-printable character which can be replaced with \0 and yield a string
  */
 static int 
-iwget_fork(const char *prog,
-	   const char *arg1,
-	   const char *arg2,
-	   char       *buf,
-	   int         buflen)
+fork_exec_read(char  *buf,
+	       int    buflen,
+	       ...
+	       )
+
 {
     int     retval = -1;
     int     stdin_pipe[2];
@@ -68,7 +85,27 @@ iwget_fork(const char *prog,
     int     pid;
     int     status;
     int     len;
+    va_list ap;
+    char   *s;
+    int     argc;
+    char  **argv;
+    int     i;
 
+    /* Translate from va_list to argv */
+    va_start(ap, buflen);
+    argc = 0;
+    while ((s = va_arg(ap, char *)) != NULL)
+	argc++;
+    va_end(ap);
+    va_start(ap, buflen);
+    if ((argv = calloc(argc+1, sizeof(char*))) == NULL){
+	perror("calloc");
+	goto done;
+    }
+    for (i=0; i<argc; i++)
+	argv[i] = va_arg(ap, char *);
+    argv[i] = NULL;
+    va_end(ap);
     if (pipe(stdin_pipe) < 0){
 	perror("pipe");
 	goto done;
@@ -79,7 +116,7 @@ iwget_fork(const char *prog,
     }
     if ((pid = fork()) != 0){ /* parent */
 	close(stdin_pipe[0]); 
-	close(stdout_pipe[1]); 
+	close(stdout_pipe[1]);
     }
     else { /* child */
 	close(0);
@@ -89,22 +126,18 @@ iwget_fork(const char *prog,
 	}
 	close(stdin_pipe[0]); 
 	close(stdin_pipe[1]); 
-	close(1); 
+	close(1);
 	if (dup(stdout_pipe[1]) < 0){
 	    perror("dup");
 	    return  -1;
 	}
 	close(stdout_pipe[1]);  
-	close(stdout_pipe[0]); 
-
-	if (execl(prog, prog, 
-		  arg1,
-		  arg2,
-		  (void*)0) < 0){
-	    perror("execl");
-	    return -1;
+	close(stdout_pipe[0]);
+	if (execv(argv[0], argv) < 0){
+	    fprintf(stderr, "execv %s: %s\n",  argv[0], strerror(errno));
+	    exit(1);
 	}
-	exit(0);
+	exit(0); /* Not reached */
     }
     if (pid < 0){
 	perror("fork");
@@ -118,7 +151,12 @@ iwget_fork(const char *prog,
     if (len>0)
 	buf[len-1] = '\0';
     close(stdout_pipe[0]);
-    waitpid(pid, &status, 0);
+    if (waitpid(pid, &status, 0) < 0){
+	perror("waitpid");
+	goto done;
+    }
+    if (status != 0)
+	goto done;
     retval = len;
  done:
     return retval;
@@ -170,11 +208,11 @@ stringadd(char  *p,
  * iwproto
  */
 int  
-iwget_test(int       dummy,
-	  char     **outstr)
+iwget_test(char  *instr,
+	   char **outstr)
 {
     int             retval = -1;
-    char            buf[256];
+    char            buf[256] = {0,};
     int             buflen = sizeof(buf);
     int             len;
     char           *s0=NULL; /* whole string */
@@ -185,31 +223,41 @@ iwget_test(int       dummy,
      *  The fork code executes iwgetid and returns a string
      */
     buflen = sizeof(buf);
-    if ((len = iwget_fork(_iwgetprog, _device, "-r", buf, buflen)) < 0)
+    if ((len = fork_exec_read(buf, buflen, _iwgetprog, _device, "-r", NULL)) < 0){
+	if (strlen(buf))
+	    fprintf(stderr, "%s\n",buf);
 	goto done;
+    }
     if (len && stringadd(buf, 0, "iwessid", &s0, &s0len) < 0)
 	goto done;
 
-    if ((len = iwget_fork(_iwgetprog, _device, "-a", buf, buflen)) < 0)
+    if ((len = fork_exec_read(buf, buflen, _iwgetprog, _device, "-a", NULL)) < 0){
+	fprintf(stderr, "%s\n", buf);
 	goto done;
+    }
     if (len && stringadd(rindex(buf, ' '), 1, "iwaddr", &s0, &s0len) < 0)
 	goto done;
 
-    if ((len = iwget_fork(_iwgetprog, _device, "-c", buf, buflen)) < 0)
+    if ((len = fork_exec_read(buf, buflen, _iwgetprog, _device, "-c", NULL)) < 0){
+	fprintf(stderr, "%s\n", buf);
 	goto done;
+    }
     if (len && stringadd(rindex(buf, ':'), 1, "iwchan", &s0, &s0len) < 0)
 	goto done;
     
-    if ((len = iwget_fork(_iwgetprog, _device, "-f", buf, buflen)) < 0)
+    if ((len = fork_exec_read(buf, buflen, _iwgetprog, _device, "-f", NULL)) < 0){
+	fprintf(stderr, "%s\n", buf);
 	goto done;
+    }
     /* Strange: sometimes ':', sometimes '=' */
     if ((p = rindex(buf, ':')) == NULL)
 	p = rindex(buf, '=');
     if (len && stringadd(p, 1, "iwfreq", &s0, &s0len) < 0)
 	goto done;
-
-    if ((len = iwget_fork(_iwgetprog, _device, "-p", buf, buflen)) < 0)
+    if ((len =  fork_exec_read(buf, buflen, _iwgetprog, _device, "-p", NULL)) < 0){
+	fprintf(stderr, "%s\n", buf);
 	goto done;
+    }
     if (len && stringadd(rindex(buf, ':'), 1, "iwproto", &s0, &s0len) < 0)
 	goto done;
     *outstr = s0;
@@ -220,12 +268,15 @@ iwget_test(int       dummy,
 
 /*! Init grideye test module. Check if file exists that is used for polling state */
 int 
-iwget_file(const char *filename, 
-	   const char *largefile,
-	   const char *device)
+iwget_setopt(const char *optname,
+	     char       *value)
 {
     int         retval = -1;
-
+    char    *device;
+    
+    if (strcmp(optname, "device"))
+	return 0;
+    device = value;
     if (device == NULL){
 	errno = EINVAL;
 	goto done;
@@ -237,19 +288,9 @@ iwget_file(const char *filename,
     return retval;
 }
 
-static const struct grideye_plugin_api_v1 api = {
-    1,
-    GRIDEYE_PLUGIN_MAGIC,
-    iwget_exit,
-    iwget_test,
-    iwget_file, /* file callback */
-    NULL,       /* input param */
-    "xml"       /* output format */
-};
-
 /* Grideye agent plugin init function must be called grideye_plugin_init */
 void *
-grideye_plugin_init_v1(int version)
+grideye_plugin_init_v2(int version)
 {
     struct stat st;
 
@@ -265,11 +306,11 @@ int main()
 {
     char   *str = NULL;
 
-    if (grideye_plugin_init_v1(1) < 0)
+    if (grideye_plugin_init_v2(2) < 0)
 	return -1;
-    if (iwget_file(NULL, NULL, "wlan0") < 0)
+    if (iwget_setopt("device", "wlan0") < 0)
 	return -1;
-    if (iwget_test(0, &str) < 0)
+    if (iwget_test(NULL, &str) < 0)
 	return -1;
     if (str){
 	fprintf(stdout, "%s\n", str);

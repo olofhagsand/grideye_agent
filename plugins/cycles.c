@@ -13,10 +13,27 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "grideye_plugin_v1.h"
+#include "grideye_plugin_v2.h"
 
 /* warmup loop counter, see init function */
 int _warmup=0;
+
+/* Forward */
+int cycles_test(char *instr, char **outstr);
+
+/*
+ * This is the API declaration
+ */
+static const struct grideye_plugin_api_v2 api = {
+    2,       /* version */
+    GRIDEYE_PLUGIN_MAGIC,
+    "cycles",
+    NULL,          /* input format */
+    "xml",         /* output format */
+    NULL,        
+    cycles_test,   /* actual test */
+    NULL
+};
 
 int 
 cycles_exit(void)
@@ -50,7 +67,7 @@ cycles_test2(uint64_t *t_us)
 }
 
 int 
-cycles_test(int    dummy, 
+cycles_test(char  *instr, 
 	    char **outstr)
 {
     int             retval = -1;
@@ -74,15 +91,6 @@ cycles_test(int    dummy,
     return retval;
 }
 
-static const struct grideye_plugin_api_v1 api = {
-    1,
-    GRIDEYE_PLUGIN_MAGIC,
-    cycles_exit,
-    cycles_test,
-    NULL, /* file fn */
-    NULL, /* input param */
-    "xml" /* output format */
-};
 
 /* Grideye agent plugin init function must be called grideye_plugin_init 
  * The init function contains an adaptive init function.
@@ -92,7 +100,7 @@ static const struct grideye_plugin_api_v1 api = {
  * For example: 17631,14708,12871, then run more than 3 warmup tests
 */
 void *
-grideye_plugin_init_v1(int version)
+grideye_plugin_init_v2(int version)
 {
     int      i;
     uint64_t t, tp = 0;
@@ -121,10 +129,10 @@ int main()
 {
     char   *str = NULL;
 
-    if (grideye_plugin_init_v1(1) == NULL)
+    if (grideye_plugin_init_v2(2) == NULL)
 	return -1;
     fprintf(stdout, "warmup: %d\n", _warmup);
-    if (cycles_test(0, &str) < 0)
+    if (cycles_test(NULL, &str) < 0)
 	return -1;
     fprintf(stdout, "%s\n", str);
     free(str);

@@ -33,13 +33,32 @@ lastAssocStatus: 0
 #include <errno.h>
 #include <math.h>
 #include <ctype.h>
+#include <stdarg.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
 
-#include "grideye_plugin_v1.h"
+#include "grideye_plugin_v2.h"
 
 static const char *_airport_prog = "/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport";
 static char *_device = NULL;
+
+/* Forward */
+int airport_exit(void);
+int airport_test(char *instr, char **outstr);
+
+/*
+ * This is the API declaration
+ */
+static const struct grideye_plugin_api_v2 api = {
+    2,
+    GRIDEYE_PLUGIN_MAGIC,
+    "wlan",
+    NULL,            /* input format */
+    "xml",            /* output format */
+    NULL,
+    airport_test,
+    airport_exit
+};
 
 int 
 airport_exit(void)
@@ -51,21 +70,21 @@ airport_exit(void)
     return 0;
 }
 
-/*! Fork and exec a iwget process
- * @param[in]  prog   Program to exec, eg iwgetid
- * @param[in]  arg1   First argument, eg -I
- * @param[in]  buf    Buffer to store output from process
- * @param[in]  buflen Length of buffer
- * @retval -1         Error
- * @retval  n         Number of bytes read
+/*! Fork and exec a process and read output from stdout
+ * @param[out]  buf    Buffer to store output from process
+ * @param[in]   buflen Length of buffer
+ * @param[in]   ...    Variable argument list
+ * @retval -1          Error. Error string in buf
+ * @retval  n          Number of bytes read
  * @note Assume that the output (if any) is terminated by a LF/CR, or some other
  * non-printable character which can be replaced with \0 and yield a string
  */
 static int 
-airport_fork(const char *prog,
-	     const char *arg1,
-	     char       *buf,
-	     int         buflen)
+fork_exec_read(char  *buf,
+	       int    buflen,
+	       ...
+	       )
+
 {
     int     retval = -1;
     int     stdin_pipe[2];
@@ -73,7 +92,27 @@ airport_fork(const char *prog,
     int     pid;
     int     status;
     int     len;
+    va_list ap;
+    char   *s;
+    int     argc;
+    char  **argv;
+    int     i;
 
+    /* Translate from va_list to argv */
+    va_start(ap, buflen);
+    argc = 0;
+    while ((s = va_arg(ap, char *)) != NULL)
+	argc++;
+    va_end(ap);
+    va_start(ap, buflen);
+    if ((argv = calloc(argc+1, sizeof(char*))) == NULL){
+	perror("calloc");
+	goto done;
+    }
+    for (i=0; i<argc; i++)
+	argv[i] = va_arg(ap, char *);
+    argv[i] = NULL;
+    va_end(ap);
     if (pipe(stdin_pipe) < 0){
 	perror("pipe");
 	goto done;
@@ -84,7 +123,7 @@ airport_fork(const char *prog,
     }
     if ((pid = fork()) != 0){ /* parent */
 	close(stdin_pipe[0]); 
-	close(stdout_pipe[1]); 
+	close(stdout_pipe[1]);
     }
     else { /* child */
 	close(0);
@@ -94,21 +133,18 @@ airport_fork(const char *prog,
 	}
 	close(stdin_pipe[0]); 
 	close(stdin_pipe[1]); 
-	close(1); 
+	close(1);
 	if (dup(stdout_pipe[1]) < 0){
 	    perror("dup");
 	    return  -1;
 	}
 	close(stdout_pipe[1]);  
-	close(stdout_pipe[0]); 
-
-	if (execl(prog, prog, 
-		  arg1,
-		  (void*)0) < 0){
-	    perror("execl");
-	    return -1;
+	close(stdout_pipe[0]);
+	if (execv(argv[0], argv) < 0){
+	    fprintf(stderr, "execv %s: %s\n",  argv[0], strerror(errno));
+	    exit(1);
 	}
-	exit(0);
+	exit(0); /* Not reached */
     }
     if (pid < 0){
 	perror("fork");
@@ -122,13 +158,18 @@ airport_fork(const char *prog,
     if (len>0)
 	buf[len-1] = '\0';
     close(stdout_pipe[0]);
-    waitpid(pid, &status, 0);
+    if (waitpid(pid, &status, 0) < 0){
+	perror("waitpid");
+	goto done;
+    }
+    if (status != 0)
+	goto done;
     retval = len;
  done:
     return retval;
 }
 
-/*! FInd a keyword in buf and write value after colon into string
+/*! Find a keyword in buf and write value after colon into string
  * @param[in]  buf    Input buffer
  * @param[out] argv  
  * @param[out] argc
@@ -186,11 +227,11 @@ find_key(char **argv,
  * The string contains the following parameters (or possibly a subset):
  */
 int  
-airport_test(int     dummy,
-	  char     **outstr)
+airport_test(char  *instr,
+	     char **outstr)
 {
     int         retval = -1;
-    char        buf[1024];
+    char        buf[1024] = {0,};
     int         buflen = sizeof(buf);
     int         len;
     char      **argv=NULL;
@@ -209,8 +250,13 @@ airport_test(int     dummy,
     /* The fork code executes airport and returns a string
      */
     buflen = sizeof(buf);
-    if ((len = airport_fork(_airport_prog, "-I", buf, buflen)) < 0)
+
+    //    if ((len = airport_fork(_airport_prog, "-I", buf, buflen)) < 0)
+    if ((len = fork_exec_read(buf, buflen, _airport_prog, "-I", NULL)) < 0){
+	if (strlen(buf))
+	    fprintf(stderr, "<%s>\n", buf);
 	goto done;
+    }
     if (len==0)
       goto ok;
     if (airport_buf2argv(buf, &argv, &argc) < 0)
@@ -261,19 +307,10 @@ airport_test(int     dummy,
 }
 
 
-static const struct grideye_plugin_api_v1 api = {
-    1,
-    GRIDEYE_PLUGIN_MAGIC,
-    airport_exit,
-    airport_test,
-    NULL,       /* file callback */
-    NULL,       /* input param */
-    "xml"       /* output format */
-};
 
 /* Grideye agent plugin init function must be called grideye_plugin_init */
 void *
-grideye_plugin_init_v1(int version)
+grideye_plugin_init_v2(int version)
 {
     struct stat st;
 
@@ -289,7 +326,7 @@ int main()
 {
     char   *str = NULL;
 
-    if (grideye_plugin_init_v1(1) < 0)
+    if (grideye_plugin_init_v2(2) < 0)
 	return -1;
     if (airport_test(0, &str) < 0)
 	return -1;

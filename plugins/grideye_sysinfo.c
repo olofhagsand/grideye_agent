@@ -16,17 +16,28 @@
 #include <errno.h>
 #include <sys/sysinfo.h>
 
-#include "grideye_plugin_v1.h"
+#include "grideye_plugin_v2.h"
 
 #define LINUX_SYSINFO_LOADS_SCALE (65536)
 #define PERCENT (100)
 #define DEC_3 (1000)
 
-int 
-sysinfo_exit(void)
-{
-    return 0;
-}
+/* Forward */
+int  sysinfo_test(char *instr, char **outstr);
+
+/*
+ * This is the API declaration
+ */
+static const struct grideye_plugin_api_v2 api = {
+    2,
+    GRIDEYE_PLUGIN_MAGIC,
+    "sysinfo",
+    NULL,         /* input format */
+    "xml",         /* output format */
+    NULL,
+    sysinfo_test,  /* actual test */
+    NULL
+};
 
 /*! Poll sysinfo command for system status
  * @param[out]  outstr  XML string with three parameters described below
@@ -38,7 +49,7 @@ sysinfo_exit(void)
  * iwproto
  */
 int  
-sysinfo_test(int        dummy,
+sysinfo_test(char      *instr,
 	     char     **outstr)
 {
     int             retval = -1;
@@ -112,24 +123,15 @@ sysinfo_test(int        dummy,
     return retval;
 }
 
-static const struct grideye_plugin_api_v1 api = {
-    1,
-    GRIDEYE_PLUGIN_MAGIC,
-    sysinfo_exit,
-    sysinfo_test,
-    NULL,       /* file callback */
-    NULL,       /* input param */
-    "xml"       /* output format */
-};
-
 /* Grideye agent plugin init function must be called grideye_plugin_init */
 void *
-grideye_plugin_init_v1(int version)
+grideye_plugin_init_v2(int version)
 {
     if (version != GRIDEYE_PLUGIN_VERSION)
 	return NULL;
     return (void*)&api;
 }
+
 #endif /* HAVE_SYS_SYSINFO_H */
 
 #ifndef _NOMAIN
@@ -137,7 +139,7 @@ int main()
 {
     char   *str = NULL;
 
-    if (grideye_plugin_init_v1(1) < 0)
+    if (grideye_plugin_init_v2(2) < 0)
 	return -1;
     if (sysinfo_test(0, &str) < 0)
 	return -1;

@@ -1,0 +1,13 @@
+[Unit]
+Description=Starts and stops a grideye agent on this system
+
+[Service]
+Type=forking
+User=root
+RestartSec=60
+Restart=on-failure
+ExecStartPre=/bin/dd if=/dev/zero of=/var/tmp/GRIDEYE_LARGEFILE bs=1M count=1K
+ExecStart=/usr/local/bin/grideye_agent -u http://grideye.sunet.se -I 1d08d032-d6d8-4397-93bb-123ec1ad4848 -N grideye_test
+
+[Install]
+WantedBy=multi-user.target

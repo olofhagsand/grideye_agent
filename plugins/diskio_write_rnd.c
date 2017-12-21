@@ -24,11 +24,32 @@
 #include <sys/time.h>
 #include <sys/param.h>
 
-#include "grideye_plugin_v1.h"
+#include "grideye_plugin_v2.h"
 
 /* Use global variables, could encapsulate in handle */
 static char    *_filename = NULL;
 static int64_t _filesize = 0;
+
+/* Forward */
+int diskio_write_rnd_exit(void);
+int diskio_write_rnd_test(char *instr, char **outstr);
+int diskio_write_rnd_setopt(const char *optname, char *value);
+
+/*
+ * This is the API declaration
+ */
+static const struct grideye_plugin_api_v2 api = {
+    2,
+    GRIDEYE_PLUGIN_MAGIC,
+    "diskio_write_rnd",
+    "str",            /* input format */
+    "xml",            /* output format */
+    diskio_write_rnd_setopt,
+    diskio_write_rnd_test,
+    diskio_write_rnd_exit
+};
+
+
 
 int
 diskio_write_rnd_exit(void)
@@ -43,7 +64,7 @@ diskio_write_rnd_exit(void)
  * @param[out]  str   XML result string
  */
 int
-diskio_write_rnd_test(int       len,
+diskio_write_rnd_test(char     *instr,
 		      char    **outstr)
 {
     int      retval = -1;
@@ -58,7 +79,9 @@ diskio_write_rnd_test(int       len,
     uint64_t t_us;
     char    *str = NULL;
     size_t   slen;
+    int      len;
 
+    len = atoi(instr);
     if (len == 0){
 	retval = 0;
 	goto done;
@@ -116,13 +139,16 @@ diskio_write_rnd_test(int       len,
  * @param[in]  template  filename on the form dictaed by mkstmp(): with XXXXXX
  */
 int
-diskio_write_rnd_file(const char *writefile,
-		      const char *largefile,
-		      const char *device)
+diskio_write_rnd_setopt(const char *optname,
+			char       *value)
 {
-    int retval = -1;
-    int fd = -1;
-
+    int   retval = -1;
+    int   fd = -1;
+    char *largefile;
+    
+    if (strcmp(optname, "largefile"))
+	return 0;
+    largefile = value;
     if (largefile == NULL || !strlen(largefile)){
 	errno = EINVAL;
 	return -1;
@@ -140,19 +166,9 @@ diskio_write_rnd_file(const char *writefile,
     return retval;
 }
 
-static const struct grideye_plugin_api_v1 api = {
-    1,
-    GRIDEYE_PLUGIN_MAGIC,
-    diskio_write_rnd_exit,
-    diskio_write_rnd_test,
-    diskio_write_rnd_file,
-    "iow", /* input param */
-    "xml"  /* output format */
-};
-
 /* Grideye agent plugin init function must be called grideye_plugin_init */
 void *
-grideye_plugin_init_v1(int version)
+grideye_plugin_init_v2(int version)
 {
     if (version != GRIDEYE_PLUGIN_VERSION)
 	return NULL;
@@ -165,7 +181,6 @@ int
 main(int   argc, 
      char *argv[])
 {
-    int     b;
     char   *f;
     char   *str = NULL;
 
@@ -174,12 +189,11 @@ main(int   argc,
 	return -1;
     }
     f = argv[1];
-    b = atoi(argv[2]);
-    grideye_plugin_init_v1(1);
-    if (diskio_write_rnd_file(NULL, f, NULL) < 0)
-	goto done;
-    if (diskio_write_rnd_test(b, &str) < 0)
-	goto done;
+    grideye_plugin_init_v2(2);
+    if (diskio_write_rnd_setopt("largefile", f) < 0)
+	return -1;
+    if (diskio_write_rnd_test(argv[2], &str) < 0)
+	return -1;
     fprintf(stdout, "%s\n", str);
     free(str);
     diskio_write_rnd_exit();

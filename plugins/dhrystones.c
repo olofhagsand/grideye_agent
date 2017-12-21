@@ -15,18 +15,29 @@
 #include <sys/time.h>
 #include <inttypes.h>
 
-#include "grideye_plugin_v1.h"
+#include "grideye_plugin_v2.h"
 
-int
-dhrystones_exit(void)
-{
-    return 0;
-}
+/* Forward */
+int dhrystones_test(char *instr, char **outstr);
+
+/*
+ * This is the API declaration
+ */
+static const struct grideye_plugin_api_v2 api = {
+    2,               /* version */
+    GRIDEYE_PLUGIN_MAGIC,
+    "dhrystones",    /* name */
+    "str",           /* input format */
+    "xml",           /* output format */
+    NULL,
+    dhrystones_test, /* actual test */
+    NULL
+};
 
 extern int dhry_main(int Number_Of_Runs, int display); /* In dhry_1.c */
 
 int
-dhrystones_test(int        dhrystones,
+dhrystones_test(char      *instr,
 		char     **outstr)
 {
     int            retval = -1;
@@ -36,7 +47,9 @@ dhrystones_test(int        dhrystones,
     size_t         slen;
     uint64_t       t_us;
     char          *str = NULL;
+    int            dhrystones;
 
+    dhrystones = atoi(instr);
     gettimeofday(&t0, NULL);
     if (dhry_main(dhrystones, 0) < 0)
 	goto done;
@@ -54,19 +67,9 @@ dhrystones_test(int        dhrystones,
     return retval;
 }
 
-static const struct grideye_plugin_api_v1 api = {
-    1,
-    GRIDEYE_PLUGIN_MAGIC,
-    dhrystones_exit,
-    dhrystones_test,
-    NULL, /* file */
-    "cmp", /* input params */
-    "xml" /* output format */
-};
-
 /* Grideye agent plugin init function must be called grideye_plugin_init */
 void *
-grideye_plugin_init_v1(int version)
+grideye_plugin_init_v2(int version)
 {
     if (version != GRIDEYE_PLUGIN_VERSION)
 	return NULL;
@@ -78,20 +81,17 @@ int
 main(int   argc, 
      char *argv[])
 {
-    int     d;
     char   *str = NULL;
 
     if (argc != 2){
 	fprintf(stderr, "usage %s <dhrystones>\n", argv[0]);
 	return -1;
     }
-    d = atoi(argv[1]);
-    grideye_plugin_init_v1(1);
-    if (dhrystones_test(d, &str) < 0)
+    grideye_plugin_init_v2(2);
+    if (dhrystones_test(argv[1], &str) < 0)
 	return -1;
     fprintf(stdout, "%s\n", str);
     free(str);
-    dhrystones_exit();
     return 0;
 }
 #endif

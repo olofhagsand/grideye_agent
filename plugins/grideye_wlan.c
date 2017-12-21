@@ -20,10 +20,29 @@
 #include <math.h>
 #include <sys/stat.h>
 
-#include "grideye_plugin_v1.h"
+#include "grideye_plugin_v2.h"
 
 static const char *_filename = "/proc/net/wireless";
 static char *_device = NULL;
+
+/* Forward */
+int wlan_exit(void);
+int wlan_test(char *instr, char **outstr);
+int wlan_setopt(const char *optname, char *value);
+
+/*
+ * This is the API declaration
+ */
+static const struct grideye_plugin_api_v2 api = {
+    2,
+    GRIDEYE_PLUGIN_MAGIC,
+    "wlan",
+    NULL,            /* input format */
+    "xml",            /* output format */
+    wlan_setopt,
+    wlan_test,
+    wlan_exit
+};
 
 int 
 wlan_exit(void)
@@ -43,7 +62,7 @@ wlan_exit(void)
  *  q_noise Wireless noise level
  */
 int  
-wlan_test(int       dummy,
+wlan_test(char     *instr,
 	  char    **outstr)
 {
     int             retval = -1;
@@ -104,12 +123,15 @@ wlan_test(int       dummy,
 
 /*! Init grideye test module. Check if file exists that is used for polling state */
 int 
-wlan_file(const char *filename, 
-	  const char *largefile,
-	  const char *device)
+wlan_setopt(const char *optname,
+	    char       *value)
 {
-    int         retval = -1;
-
+    int      retval = -1;
+    char    *device;
+    
+    if (strcmp(optname, "device"))
+	return 0;
+    device = value;
     if (device == NULL){
 	errno = EINVAL;
 	goto done;
@@ -121,19 +143,10 @@ wlan_file(const char *filename,
     return retval;
 }
 
-static const struct grideye_plugin_api_v1 api = {
-    1,
-    GRIDEYE_PLUGIN_MAGIC,
-    wlan_exit,
-    wlan_test,
-    wlan_file,
-    NULL, /* input param */
-    "xml" /* output format */
-};
 
 /* Grideye agent plugin init function must be called grideye_plugin_init */
 void *
-grideye_plugin_init_v1(int version)
+grideye_plugin_init_v2(int version)
 {
     struct stat st;
 
@@ -149,7 +162,7 @@ int main()
 {
     char   *str = NULL;
 
-    if (grideye_plugin_init_v1(1) < 0)
+    if (grideye_plugin_init_v2(2) < 0)
 	return -1;
     if (wlan_file(NULL, NULL, "wlan0") < 0)
 	return -1;
