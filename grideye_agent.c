@@ -1547,7 +1547,7 @@ main(int   argc,
     } /* while */
     clicon_log(LOG_DEBUG, "wi:%s", wi);
     /* sensd does not want an 0x%lx but parse_uint64 does */
-    snprintf(eid64str, sizeof(eid64str), "0x%lx", eid64);
+    snprintf(eid64str, sizeof(eid64str), "0x%" PRIu64, eid64);
     /* Get some system info */
     if (get_system_info(&info) < 0)
 	goto done;
