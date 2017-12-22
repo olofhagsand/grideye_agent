@@ -612,7 +612,7 @@ echo_application(struct sender *snd,
      */
     if (payload){
 	/* parse incoming payload XML */
-	if (xml_parse_string(payload, NULL, &xt) < 0)
+	if (json_parse_str(payload, &xt) < 0)
 	    goto done;
 	/* Check version */
 	if ((x = xpath_first(xt, "grideye/version")) == NULL){
@@ -673,7 +673,7 @@ echo_application(struct sender *snd,
 		argstr = xml_body(x);
 	    if (api->gp_test_fn){
 		clicon_log(LOG_DEBUG, "%s name:%s(%s)",
-			   __FUNCTION__, p->p_name, argstr);
+			   __FUNCTION__, p->p_name, argstr?argstr:"");
 		if ((pret = api->gp_test_fn(argstr, &str)) < 0){
 		    clicon_log(LOG_NOTICE, "plugin %s failed: retval:%d str:%s", p->p_name, pret, str);
 		    continue;
@@ -683,10 +683,21 @@ echo_application(struct sender *snd,
 		    free(str);
 		    str = NULL;
 		}		    
-		break;
 	    }
 	}
     } /* payload */
+#ifdef NOTYET /* JSON */
+	    cxobj *xt= NULL;
+	    cbuf *cb;
+
+	    cb = cbuf_new();
+	    if (xml_parse_string(cbuf_get(th->th_payload), NULL, &xt) < 0)
+		goto done;
+	    xml_rootchild(xt,0,&xt);
+	    if (xml2json_cbuf(cb, xt, 0) < 0)
+		goto done;
+	    cbuf_free(cb);
+#endif
     clicon_log(LOG_DEBUG, "%s return:%s", __FUNCTION__, cbuf_get(cb));
     retval = 1; /* OK */
  done:
