@@ -72,19 +72,22 @@ A grideye plugin is a dynamically loaded plugin written in C. You
 write a file with a couple of functions, compile it, place it in a
 directory, and restart grideye_agent.
 
-A grideye plugin has a pre-defined function *grideye_plugin_init_v1()*
+A grideye plugin has a pre-defined function *grideye_plugin_init_v2()*
 which returns a table containing API functions.
 
 The API table is as follows:
 
 Symbol | Type | Mandatory |Description
 --- | --- | --- | ---
-gp_version | Variable | Yes | Must be 1
+gp_version | Variable | Yes | Must be 2
 gp_magic | Variable | Yes | Must be 0x3f687f03
-gp_exit_fn | Function | No | An exit function
+gp_name | Variable | Yes | Name of plugin
+gp_input_formar | Variable | No | Test input parameter format
+gp_output_formar | Variable | No | Test output parameter format
+gp_setopt_fn | Function | No | File and device settings
 gp_test_fn | Function | Yes | The actual test function with input and output parameters.
-gp_file_fn | Function | No | Predefined files and devices may be used in tests.
-gp_input | Variable | Yes | Name of input parameter requested
+gp_exit_fn | Function | No | An exit function
+
 gp_output | Variable | Yes | Format of output. Only "xml" supported
 
 ### 3.2 Identifying the input: parameters
@@ -98,13 +101,13 @@ defaults.
    time=1.751042s;;;0.000000 size=495051B;;;0
 ```
 
-In this example, the *host* parameter as chosen as dynamically
+In this example, the *host* parameter is chosen as dynamically
 configurable, which means it can dynamically change in a Grideye testcase.
 
 This means 'gp_input=host' is defined in the plugin and gp_test_fn is called with 'host' as input parameter, example:
 
 ```
-   gp_test_fn("www.youtube.com", ...)
+   gp_test_fn("www.youtube.com")
 ```
 
 ### 3.3 Identifying the output: metrics
@@ -167,7 +170,7 @@ can be found in (plugins/grideye_http.c):
    http_test(int        host,
              char     **outstr)
    {
-      if (http_fork(_PROGRAM, "-H", "www.youtube.com", "-S", buf, buflen) < 0)
+      if (http_fork(_PROGRAM, "-H", host, "-S", buf, buflen) < 0)
          goto done;
       sscanf(buf, "%*s %*s %*s %s %s %*s %d %*s %*s %lf\n",
             code0, code1, &size, &time);
@@ -194,7 +197,7 @@ stand-alone. This is useful for verifying, validating and debugging:
    <hstatus>"200 OK"</hstatus><htime>1430</htime><hsize>491172</hsize>
 ```
 
-### 3.7 Full grideye run
+### 3.7 Grideye plugin
 
 The grideye plugin is compiled into a loadable module:
 'grideye_http.so.1', and installed under /usr/local/lib/grideye and the grideye_agent is restarted:
@@ -205,6 +208,25 @@ The grideye plugin is compiled into a loadable module:
 
 The new metrics appears in the grideye controller, for plotting, alarming and analysis.
 
+### 3.8 Invoking the new test from the controller
+
+The next step is to invoke the new plugin from the central grideye
+controller. This is done by creating a new test (or extend an existing
+test) with the new plugin.
+
+The following example shows a new test that is added to an agent
+template to invoke the new test:
+
+```
+    <test>
+       <name>newtest</name>
+       <interval>10000</interval>
+       <plugin>
+          <name>http</name>
+          <param>www.youtube.com</param>
+       </plugin>
+    </test>
+```
 
 ## 4. Licenses
 

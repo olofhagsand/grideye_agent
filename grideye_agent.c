@@ -679,25 +679,29 @@ echo_application(struct sender *snd,
 		    continue;
 		}
 		if (str){
-		    cprintf(cb, "%s", str); 
+		    if (strcmp(api->gp_output_format, "json")==0){
+			cxobj *xt= NULL;
+			cbuf *cbj;
+			if ((cbj = cbuf_new())==NULL){
+			    clicon_err(OE_UNIX, errno, "cbuf_new");
+			    goto done;
+			}
+			if (json_parse_str(str, &xt) < 0)
+			    goto done;
+			xml_rootchild(xt,0,&xt);
+			if (xml2json_cbuf(cb, xt, 0) < 0)
+			    goto done;
+			xml_free(xt);
+		    }
+		    else 
+			cprintf(cb, "%s", str); /* XML */
 		    free(str);
 		    str = NULL;
 		}		    
 	    }
 	}
     } /* payload */
-#ifdef NOTYET /* JSON */
-	    cxobj *xt= NULL;
-	    cbuf *cb;
 
-	    cb = cbuf_new();
-	    if (xml_parse_string(cbuf_get(th->th_payload), NULL, &xt) < 0)
-		goto done;
-	    xml_rootchild(xt,0,&xt);
-	    if (xml2json_cbuf(cb, xt, 0) < 0)
-		goto done;
-	    cbuf_free(cb);
-#endif
     clicon_log(LOG_DEBUG, "%s return:%s", __FUNCTION__, cbuf_get(cb));
     retval = 1; /* OK */
  done:
