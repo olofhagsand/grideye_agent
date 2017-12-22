@@ -169,6 +169,19 @@ plugins_len(struct plugin *plugins)
     return i;
 }
 
+/*! helper function */
+static struct plugin *
+plugin_find(char *name)
+{
+    struct plugin *p;
+
+    for (p = plugins; p&&p->p_api!=NULL; p++)
+	if (strcmp(p->p_name, name) == 0)
+	    return p;
+    return NULL;
+}
+
+
 /*! Load a specific plugin, call its init function and add it to plugins list
  * If init function fails (not found, wrong version, etc) print a log and dont
  * add it.
@@ -552,6 +565,7 @@ send_one_agent(int              s,
 }
 
 
+
 /*! Received grideye data packet. Make application emulation
  * @param[in]  snd     Sender of received data packet 
  * @param[in]  payload String payload in data packet
@@ -568,19 +582,21 @@ echo_application(struct sender *snd,
 {
     int                retval = -1;
     cxobj             *xcontrol = NULL;
-    struct plugin     *p;
     uint64_t          *v = NULL;
     int64_t           *vi = NULL;
-    struct grideye_plugin_api_v2 *api;
     int                i;
-    int               *invec = NULL;
-    char             **pvec = NULL;
-    int                plen;
-    char              *pstr;
+    struct plugin     *p;
+    struct grideye_plugin_api_v2 *api;
     char              *argstr;
-    char              *pp;
+    char              *pstr;
     int                pret;
     char              *str = NULL;
+    cxobj             *xt = NULL;
+    cxobj             *x;
+    cxobj             *xp;
+    char              *xb;
+    cxobj            **xvec = NULL;
+    size_t             xlen;
     
     clicon_log(LOG_DEBUG, "%s payload:%s", __FUNCTION__, payload);
     if ((xcontrol = snd->s_xml) == NULL){ /* <grideye> */
@@ -590,73 +606,94 @@ echo_application(struct sender *snd,
 	errpkts++;
 	goto done;
     }
-    /* Look at payload in data packets */
-    if (payload){ 
-	/* This is the xml in the meta/control data eg <grideye><version>0...*/
-	if ((pvec = clicon_strsep(payload, ";", &plen)) == NULL)
-	    goto done;	
-	if (plen < 2){
-	    clicon_log(LOG_ERR, "%s: Sender expected at least <version>;<name> received only %d arguments in payload", 
-		       __FUNCTION__, plen);
+    /* Look at payload in data packets:
+     * <grideye><version>2</version><name>a1</name><plugin><name>p1</name><param>12</param><param>www.youtube.com</param></plugin><plugin>p2</plugin></grideye> 
+     * and decompress
+     */
+    if (payload){
+	/* parse incoming payload XML */
+	if (xml_parse_string(payload, NULL, &xt) < 0)
+	    goto done;
+	/* Check version */
+	if ((x = xpath_first(xt, "grideye/version")) == NULL){
+	    clicon_log(LOG_ERR, "%s: <version> not found in payload", 
+		       __FUNCTION__);
 	    retval = 0; 	    /* sanity check failed, just continue */
 	    errpkts++;
 	    goto done;
 	}
-	if (atoi(pvec[0]) != GRIDEYE_AGENT_VERSION){
+	xb = xml_body(x);
+	if (xb==NULL || atoi(xb) != GRIDEYE_AGENT_VERSION){
 	    clicon_log(LOG_ERR, "%s: Sender version %d expected, received %s", 
-		       __FUNCTION__, GRIDEYE_AGENT_VERSION, pvec[0]);
+		       __FUNCTION__, GRIDEYE_AGENT_VERSION, xb);
 	    retval = 0; 	    /* sanity check failed, just continue */
 	    errpkts++;
 	    goto done;
 	}
-	if (strcmp(pvec[1], myname)){
-	    clicon_log(LOG_ERR, "%s: Sender expected name %s but received %s", 
-		       __FUNCTION__, myname, pvec[1]);
+	/* Verify name of agent */
+	if ((x = xpath_first(xt, "grideye/name")) == NULL){
+	    clicon_log(LOG_ERR, "%s: <name> not found in payload", 
+		       __FUNCTION__);
 	    retval = 0; 	    /* sanity check failed, just continue */
 	    errpkts++;
 	    goto done;
 	}
-	for (i=2; i<plen; i++){
-	    pstr = pvec[i];
-	    /* XXX: Argument handling is primitive, only
-	     *   fn(arg), fn(arg,arg) 
-	     * where the plugin test function must handle the arguments.
-	     * Does not handle other input formats
-	     */
-	    if ((pp = index(pstr, '(')) != NULL)
-		*pp = '\0';
-	    argstr = pp+1;
-	    if ((pp = index(argstr, ')')) != NULL)
-		*pp = '\0';
-	    for (p = plugins; (api=p->p_api)!=NULL; p++){
-		if (p->p_disable)
+	xb = xml_body(x);
+	if (xb==NULL || strcmp(xb, myname)){
+	    clicon_log(LOG_ERR, "%s: Expected name %s but received %s", 
+		       __FUNCTION__, myname, xb);
+	    retval = 0; 	    /* sanity check failed, just continue */
+	    errpkts++;
+	    goto done;
+	}
+	/* Invoke plugins */
+	if (xpath_vec(xt, "grideye/plugin", &xvec, &xlen) < 0) 
+	    goto done;
+	/* Loop through plugin calls */
+	for (i=0; i<xlen; i++){
+	    xp = xvec[i];
+	    if ((x = xpath_first(xp, "name")) == NULL){
+		clicon_log(LOG_ERR, "%s: <name> expected in plugin", 
+			   __FUNCTION__);
+		retval = 0; 	    /* sanity check failed, just continue */
+		errpkts++;
+		goto done;
+	    }
+	    pstr = xml_body(x);
+	    /* Find matching plugin */
+	    if ((p = plugin_find(pstr)) == NULL)
+		continue; /* silently ignore */
+	    if (p->p_disable)
+		continue; /* silently ignore */
+	    if ((api = p->p_api) == NULL)
+		continue; /* silently ignore */
+	    /* XXX only single argument */
+	    argstr = NULL;
+	    if ((x = xpath_first(xp, "param")) != NULL)
+		argstr = xml_body(x);
+	    if (api->gp_test_fn){
+		clicon_log(LOG_DEBUG, "%s name:%s(%s)",
+			   __FUNCTION__, p->p_name, argstr);
+		if ((pret = api->gp_test_fn(argstr, &str)) < 0){
+		    clicon_log(LOG_NOTICE, "plugin %s failed: retval:%d str:%s", p->p_name, pret, str);
 		    continue;
-		if (strcmp(p->p_name, pstr))
-		    continue;
-		if (api->gp_test_fn){
-		    clicon_log(LOG_DEBUG, "%s name:%s(%s)",
-			       __FUNCTION__, p->p_name, argstr);
-		    if ((pret = api->gp_test_fn(argstr, &str)) < 0){
-			clicon_log(LOG_NOTICE, "plugin %s failed: retval:%d str:%s", p->p_name, pret, str);
-			continue;
-		    }
-		    if (str){
-			cprintf(cb, "%s", str); 
-			free(str);
-			str = NULL;
-		    }		    
-		    break;
 		}
+		if (str){
+		    cprintf(cb, "%s", str); 
+		    free(str);
+		    str = NULL;
+		}		    
+		break;
 	    }
 	}
     } /* payload */
     clicon_log(LOG_DEBUG, "%s return:%s", __FUNCTION__, cbuf_get(cb));
     retval = 1; /* OK */
  done:
-    if (pvec)
-	free(pvec);
-    if (invec)
-	free(invec);
+    if (xvec)
+       free(xvec);
+    if (xt)
+	xml_free(xt);
     if (v)
 	free(v);
     if (vi)
