@@ -18,6 +18,11 @@
 
 #include "grideye_plugin_v2.h"
 
+/*
+ * Constants
+ */
+#define LOOPCOUNT 1000000
+
 static int debug = 0;
 
 /* Compute a 2^log that is highest number not more than 50% of memory */
@@ -53,8 +58,8 @@ mem_read_test(char    *instr,
     size_t          slen;
 
     if (debug){
-	if ((1L<<_log) > 1000000)
-	    fprintf(stderr, "size:%luM\n", (1L<<_log)/1000000);
+	if ((1L<<_log) > LOOPCOUNT)
+	    fprintf(stderr, "size:%luM\n", (1L<<_log)/LOOPCOUNT);
     }
     gettimeofday(&t0, NULL);
     if (mem_read_test1(_log) < 0)
@@ -62,6 +67,7 @@ mem_read_test(char    *instr,
     gettimeofday(&t1, NULL);
     timersub(&t1, &t0, &dt);
     t_us = dt.tv_usec+dt.tv_sec*1000000;
+    t_us /= (250*LOOPCOUNT); /* Bring it down to 1K accesses (each loop x 4) */
     if ((slen = snprintf(NULL, 0, "<tmr>%" PRIu64 "</tmr>", t_us)) <= 0)
 	goto done;
     if ((str = malloc(slen+1)) == NULL)
