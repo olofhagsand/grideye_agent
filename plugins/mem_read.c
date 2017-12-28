@@ -67,7 +67,7 @@ mem_read_test(char    *instr,
     gettimeofday(&t1, NULL);
     timersub(&t1, &t0, &dt);
     t_us = dt.tv_usec+dt.tv_sec*1000000;
-    t_us /= (250*LOOPCOUNT); /* Bring it down to 1K accesses (each loop x 4) */
+    t_us = t_us*250/LOOPCOUNT; /* Bring it down to 1K accesses (each loop x 4) */
     if ((slen = snprintf(NULL, 0, "<tmr>%" PRIu64 "</tmr>", t_us)) <= 0)
 	goto done;
     if ((str = malloc(slen+1)) == NULL)
