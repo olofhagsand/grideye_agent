@@ -1,7 +1,7 @@
 /* 
  * 
  * compile:
- *   gcc -O2 -Wall -o grideye_sysinfo grideye_sysinfo.c
+ *   gcc -O2 -Wall -DHAVE_SYS_SYSINFO_H=1 -o grideye_sysinfo grideye_sysinfo.c
  * run: 
  *   ./grideye_sysinfo
  */
@@ -132,7 +132,7 @@ grideye_plugin_init_v2(int version)
     return (void*)&api;
 }
 
-#endif /* HAVE_SYS_SYSINFO_H */
+
 
 #ifndef _NOMAIN
 int main() 
@@ -147,7 +147,7 @@ int main()
 	fprintf(stdout, "%s\n", str);
 	free(str);
     }
-    sysinfo_exit();
     return 0;
 }
 #endif
+#endif /* HAVE_SYS_SYSINFO_H */

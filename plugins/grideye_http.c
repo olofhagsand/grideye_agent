@@ -165,7 +165,7 @@ http_test(char      *instr,
     sscanf(buf, "%*s %*s %*s %s %s %*s %d %*s %*s %lf\n",
 	   code0, code1, &size, &time);
     if ((slen = snprintf(NULL, 0, 
-			 "<hstatus>%s</hstatus>"
+			 "<hstatus>\"%s\"</hstatus>"
 			 "<htime>%d</htime>"
 			 "<hsize>%d</hsize>",
 			 code0,
@@ -175,7 +175,7 @@ http_test(char      *instr,
     if ((str = malloc(slen+1)) == NULL)
 	goto done;
     if ((slen = snprintf(str, slen+1, 
-			 "<hstatus>%s</hstatus>"
+			 "<hstatus>\"%s\"</hstatus>"
 			 "<htime>%d</htime>"
 			 "<hsize>%d</hsize>",
 			 code0,
