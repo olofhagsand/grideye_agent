@@ -248,7 +248,7 @@ grideye_plugin_load(void          *handle,
     goto done;
 }
 
-/*! Load grideye agent plugins from directory, return handles in vector
+/*! Load grideye agent plugins from directory, call init and return handles in vector
  * @param[in]  dir      name of directory where grideye .so plugins reside
  * @param[out] plugins  Null-terminated vector of plugin handles.
  */
@@ -1641,7 +1641,7 @@ main(int   argc,
 	clicon_err(OE_UNIX, errno, "calloc");
 	goto done;
     }
-    /* Load test plugins */
+    /* Load test plugins, and call their init functions */
     if (plugin_load_dir(plugin_dir, &plugins) < 0)
 	goto done;
     for (p = plugins; (api=p->p_api)!=NULL; p++){

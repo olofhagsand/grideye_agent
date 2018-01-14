@@ -189,7 +189,8 @@ main(int   argc,
 	return -1;
     }
     f = argv[1];
-    grideye_plugin_init_v2(2);
+    if (grideye_plugin_init_v2(2) == NULL)
+	return -1;
     if (diskio_write_rnd_setopt("largefile", f) < 0)
 	return -1;
     if (diskio_write_rnd_test(argv[2], &str) < 0)

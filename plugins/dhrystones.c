@@ -87,7 +87,8 @@ main(int   argc,
 	fprintf(stderr, "usage %s <dhrystones>\n", argv[0]);
 	return -1;
     }
-    grideye_plugin_init_v2(2);
+    if (grideye_plugin_init_v2(2) == NULL)
+	return -1;
     if (dhrystones_test(argv[1], &str) < 0)
 	return -1;
     fprintf(stdout, "%s\n", str);

@@ -155,7 +155,8 @@ main(int   argc,
 	return -1;
     }
     f = argv[1];
-    grideye_plugin_init_v2(2);
+    if (grideye_plugin_init_v2(2) == NULL)
+	return -1;
     if (diskio_write_setopt("writefile", f) < 0)
 	return -1;
     if (diskio_write_test(argv[2], &str) < 0)

@@ -139,7 +139,7 @@ int main()
 {
     char   *str = NULL;
 
-    if (grideye_plugin_init_v2(2) < 0)
+    if (grideye_plugin_init_v2(2) == NULL)
 	return -1;
     if (sysinfo_test(0, &str) < 0)
 	return -1;

@@ -15,6 +15,7 @@
 #include <errno.h>
 #include <stdarg.h>
 #include <sys/wait.h>
+#include <sys/stat.h>
 
 #include "grideye_plugin_v2.h"
 
@@ -188,12 +189,19 @@ http_test(char      *instr,
     return retval;
 }
 
-/* Grideye agent plugin init function must be called grideye_plugin_init */
+/* Grideye agent plugin init function must be called grideye_plugin_init 
+ */
 void *
 grideye_plugin_init_v2(int version)
 {
+    struct stat st;
+
     if (version != GRIDEYE_PLUGIN_VERSION)
 	return NULL;
+    if (stat(_PROGRAM, &st) < 0){ /* Nagios check program exists? */
+	fprintf(stderr, "stat(%s): %s\n", _PROGRAM, strerror(errno));
+	return NULL;
+    }
     return (void*)&api;
 }
 
@@ -208,7 +216,7 @@ int main(int   argc,
 	fprintf(stderr, "usage %s <host>\n", argv[0]);
 	return -1;
     }
-    if (grideye_plugin_init_v2(2) < 0)
+    if (grideye_plugin_init_v2(2) == NULL)
 	return -1;
     if (http_test(argv[1], &str) < 0)
 	return -1;

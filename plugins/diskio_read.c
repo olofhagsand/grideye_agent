@@ -201,7 +201,7 @@ main(int   argc,
 	return -1;
     }
     f = argv[1];
-    if (grideye_plugin_init_v2(2) < 0)
+    if (grideye_plugin_init_v2(2) == NULL)
 	return -1;
     if (diskio_read_setopt("largefile", f) < 0)
 	return -1;

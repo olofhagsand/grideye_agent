@@ -162,7 +162,7 @@ int main()
 {
     char   *str = NULL;
 
-    if (grideye_plugin_init_v2(2) < 0)
+    if (grideye_plugin_init_v2(2) == NULL)
 	return -1;
     if (wlan_file(NULL, NULL, "wlan0") < 0)
 	return -1;
